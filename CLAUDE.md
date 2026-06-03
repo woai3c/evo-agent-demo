@@ -1,0 +1,108 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Overview
+
+Evo is the companion demo project for the ebook "构建会自我进化的 AI Agent 产品" (Building Self-Evolving AI Agents). It is a multi-tool AI work assistant with built-in Operation Tracing, Error Pattern detection, and automated self-inspection — demonstrating how an AI Agent Harness can evolve itself through production data.
+
+The full PRD is at `tmp/self-evolving-harness-prd.md`. The source article is at `tmp/需要自进化的不是 Agent，而是 Harness.txt`.
+
+## Commands
+
+```bash
+pnpm install            # install all workspaces
+pnpm dev                # start server (3000) + web (5173) in parallel
+pnpm dev:server         # server only (tsx watch, auto-reloads)
+pnpm dev:web            # web only (vite)
+pnpm build              # build all packages
+pnpm typecheck          # tsc --noEmit across all packages
+pnpm lint               # eslint --fix
+pnpm format             # prettier --write
+pnpm format:check       # prettier --check
+pnpm db:seed            # seed Chinook demo data into SQLite
+pnpm simulate           # simulate multi-user traffic with injected errors
+pnpm inspect            # trigger one inspection round (run simulate first)
+```
+
+Single-package commands use `pnpm --filter`:
+
+```bash
+pnpm --filter @evo/server run dev
+pnpm --filter @evo/web run dev
+pnpm --filter @evo/server run typecheck
+```
+
+## Architecture
+
+pnpm monorepo with three packages:
+
+- **`packages/shared`** (`@evo/shared`) — TypeScript types and constants only, no runtime deps. Consumed by both server and web via `workspace:*`. Uses raw `.ts` source as entrypoint (no build step).
+- **`packages/server`** (`@evo/server`) — Hono + Node.js HTTP server. Agent loop, 6 tools, tracing, evolution engine, REST API.
+- **`packages/web`** (`@evo/web`) — Vite + React 19 + Tailwind + shadcn/ui. Chat UI + admin dashboard.
+
+### Server internals (`packages/server/src/`)
+
+The server has four subsystems that form a pipeline:
+
+1. **Agent loop** (`agent/loop.ts`, `agent/dispatch.ts`) — Core execution engine. Each user message triggers `agentLoop()` which runs turns until the model stops. `dispatch.ts` routes `tool_call` to the correct tool.
+
+2. **Tools** (`tools/`) — Six tools the agent can call: `webSearch` (Tavily), `webFetch`, `readFile`, `codeRunner`, `dbQuery` (Chinook SQLite), `sendEmail`. Defined using Vercel AI SDK `tool()`.
+
+3. **Tracing** (`tracing/`) — Embedded inside the agent loop (not bolted on). `Tracer` emits events per step. `TraceStore` writes each step to SQLite immediately (partial trace > no trace on crash). `sanitizer.ts` strips sensitive fields. `snapshot.ts` builds the complete Operation record.
+
+4. **Evolution** (`evolution/`) — The self-evolving pipeline:
+   - `error-bucketer.ts` — groups errors by provider × errorType × statusCode × toolName
+   - `pattern-matcher.ts` — checks errors against the pattern registry
+   - `inspector.ts` — LLM-driven agent that analyzes unmatched errors, classifies them (`user_error` / `provider_error` / `harness_bug`), generates new patterns
+   - `auto-fix.ts` — applies fixes: user/provider errors → new pattern + backfill; harness bugs → bug report awaiting human confirmation
+   - `context-tuner.ts` — adjusts compression thresholds from trace data (L4 agent-autonomous embryo)
+
+5. **Context management** (`context/`) — `compression.ts` reduces message history near window limits. `truncation.ts` applies per-tool head/tail byte budgets.
+
+### Server API routes (`api/`)
+
+All mounted under `/api/` in `app.ts`:
+
+- `POST /api/chat/message` — accepts user message, runs agent loop, streams SSE
+- `GET /api/chat/conversations` — list conversations
+- `/api/traces`, `/api/patterns`, `/api/inspections`, `/api/dashboard` — admin data
+
+### Web routes (`packages/web/src/`)
+
+- `/` — Chat page (conversation sidebar + message area)
+- `/admin` — Dashboard overview (stats cards + nav to sub-pages)
+- `/admin/traces`, `/admin/errors`, `/admin/patterns`, `/admin/inspections`, `/admin/trends`
+
+### Database
+
+SQLite via `better-sqlite3` with WAL mode. Schema in `db/schema.ts`. Three table groups:
+
+- **Trace**: `operations`, `steps`, `errors`
+- **Evolution**: `patterns`, `inspections`
+- **App**: `users`, `conversations`, `sent_emails`
+- **Demo data**: Chinook dataset (artists, albums, tracks, etc.) loaded by `pnpm db:seed`
+
+### LLM providers
+
+Vercel AI SDK with three providers configured in `providers/registry.ts`: DeepSeek (default), OpenAI, Anthropic. Provider/model names defined as const tuples in `shared/constants.ts`.
+
+### Communication protocol
+
+Server → Web uses SSE with typed `StreamEvent` union: `text-delta`, `tool-call`, `tool-result`, `error`, `done`.
+
+## Key Concepts
+
+- **Harness**: The system wrapping the LLM (agent loop + tools + context + error recovery). Evo is the vehicle; the Self-Evolving Harness is the protagonist.
+- **Tracing as first-class citizen**: `run step = trace event`. If a step has no trace, it's a code bug.
+- **Self-Evolving**: Error patterns are automatically detected from aggregated traces, classified (user_error / provider_error / harness_bug), and fixed through an inspection agent.
+
+## Conventions
+
+- ESM only (`"type": "module"`) — use `.js` extensions in imports (e.g., `'./app.js'`)
+- Prettier: single quotes, no semicolons, 120 print width, import order sorting (`@trivago/prettier-plugin-sort-imports`)
+- ESLint: `typescript-eslint` recommended + `react-hooks` + `unused-imports` (unused imports are errors)
+- Commits: conventional commits, enforced by commitlint + husky. lint-staged runs eslint + prettier on pre-commit.
+- All user-facing text in Chinese; code, comments, commits in English
+- Unused function params prefixed with `_` (eslint `argsIgnorePattern: '^_'`)
+- Node.js >= 20.19.0 required
