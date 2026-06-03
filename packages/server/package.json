@@ -1,0 +1,32 @@
+{
+  "name": "@evo/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "db:seed": "tsx scripts/seed-demo-data.ts",
+    "inspect": "tsx scripts/run-inspection.ts",
+    "simulate": "tsx scripts/simulate-errors.ts"
+  },
+  "dependencies": {
+    "@evo/shared": "workspace:*",
+    "@hono/node-server": "^1.14.1",
+    "hono": "^4.7.10",
+    "ai": "^4.3.16",
+    "@ai-sdk/deepseek": "^0.1.8",
+    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/anthropic": "^1.2.12",
+    "better-sqlite3": "^11.9.1",
+    "zod": "^3.25.34",
+    "nanoid": "^5.1.5",
+    "dotenv": "^16.5.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

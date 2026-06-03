@@ -1,0 +1,10 @@
+{
+  "singleQuote": true,
+  "semi": false,
+  "printWidth": 120,
+  "trailingComma": "all",
+  "plugins": ["@trivago/prettier-plugin-sort-imports"],
+  "importOrder": ["^node:", "^react", "^hono", "^(ai|@ai-sdk)", "^zod", "^@evo/", "^[./]"],
+  "importOrderSeparation": true,
+  "importOrderSortSpecifiers": true
+}

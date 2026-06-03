@@ -1,3 +1,12 @@
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Uploads
+uploads/
+
 # Logs
 logs
 *.log
@@ -141,3 +150,5 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+tmp

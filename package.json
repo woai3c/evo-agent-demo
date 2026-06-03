@@ -1,0 +1,45 @@
+{
+  "name": "evo-agent-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Evo — a self-evolving AI agent harness demo, companion project for the ebook",
+  "scripts": {
+    "dev": "pnpm --parallel -r run dev",
+    "dev:server": "pnpm --filter @evo/server run dev",
+    "dev:web": "pnpm --filter @evo/web run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:seed": "pnpm --filter @evo/server run db:seed",
+    "inspect": "pnpm --filter @evo/server run inspect",
+    "simulate": "pnpm --filter @evo/server run simulate",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "@trivago/prettier-plugin-sort-imports": "^6.0.0",
+    "eslint": "^10.0.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "husky": "^9.0.0",
+    "lint-staged": "^16.0.0",
+    "prettier": "^3.0.0",
+    "typescript-eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
