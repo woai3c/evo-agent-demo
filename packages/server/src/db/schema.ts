@@ -102,6 +102,7 @@ export function initDatabase(dbPath: string): Database.Database {
       title           TEXT NOT NULL DEFAULT 'New conversation',
       model           TEXT NOT NULL,
       provider        TEXT NOT NULL,
+      messages        TEXT NOT NULL DEFAULT '[]',
       created_at      TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -115,6 +116,106 @@ export function initDatabase(dbPath: string): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- ── Chinook demo data tables ──
+
+    CREATE TABLE IF NOT EXISTS artists (
+      artist_id INTEGER PRIMARY KEY,
+      name      TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS albums (
+      album_id  INTEGER PRIMARY KEY,
+      title     TEXT NOT NULL,
+      artist_id INTEGER NOT NULL REFERENCES artists(artist_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS genres (
+      genre_id INTEGER PRIMARY KEY,
+      name     TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS media_types (
+      media_type_id INTEGER PRIMARY KEY,
+      name          TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS tracks (
+      track_id      INTEGER PRIMARY KEY,
+      name          TEXT NOT NULL,
+      album_id      INTEGER REFERENCES albums(album_id),
+      media_type_id INTEGER NOT NULL REFERENCES media_types(media_type_id),
+      genre_id      INTEGER REFERENCES genres(genre_id),
+      composer      TEXT,
+      milliseconds  INTEGER NOT NULL DEFAULT 0,
+      bytes         INTEGER NOT NULL DEFAULT 0,
+      unit_price    REAL NOT NULL DEFAULT 0.99
+    );
+
+    CREATE TABLE IF NOT EXISTS playlists (
+      playlist_id INTEGER PRIMARY KEY,
+      name        TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS playlist_track (
+      playlist_id INTEGER NOT NULL REFERENCES playlists(playlist_id),
+      track_id    INTEGER NOT NULL REFERENCES tracks(track_id),
+      PRIMARY KEY (playlist_id, track_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS employees (
+      employee_id  INTEGER PRIMARY KEY,
+      last_name    TEXT NOT NULL,
+      first_name   TEXT NOT NULL,
+      title        TEXT,
+      reports_to   INTEGER REFERENCES employees(employee_id),
+      birth_date   TEXT,
+      hire_date    TEXT,
+      address      TEXT,
+      city         TEXT,
+      state        TEXT,
+      country      TEXT,
+      postal_code  TEXT,
+      phone        TEXT,
+      fax          TEXT,
+      email        TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS customers (
+      customer_id    INTEGER PRIMARY KEY,
+      first_name     TEXT NOT NULL,
+      last_name      TEXT NOT NULL,
+      company        TEXT,
+      address        TEXT,
+      city           TEXT,
+      state          TEXT,
+      country        TEXT,
+      postal_code    TEXT,
+      phone          TEXT,
+      fax            TEXT,
+      email          TEXT NOT NULL,
+      support_rep_id INTEGER REFERENCES employees(employee_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS invoices (
+      invoice_id      INTEGER PRIMARY KEY,
+      customer_id     INTEGER NOT NULL REFERENCES customers(customer_id),
+      invoice_date    TEXT NOT NULL,
+      billing_address TEXT,
+      billing_city    TEXT,
+      billing_state   TEXT,
+      billing_country TEXT,
+      billing_postal_code TEXT,
+      total           REAL NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS invoice_items (
+      invoice_line_id INTEGER PRIMARY KEY,
+      invoice_id      INTEGER NOT NULL REFERENCES invoices(invoice_id),
+      track_id        INTEGER NOT NULL REFERENCES tracks(track_id),
+      unit_price      REAL NOT NULL,
+      quantity        INTEGER NOT NULL
+    );
+
     -- ── Indexes ──
 
     CREATE INDEX IF NOT EXISTS idx_operations_user    ON operations(user_id);
@@ -124,6 +225,11 @@ export function initDatabase(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_errors_operation   ON errors(operation_id);
     CREATE INDEX IF NOT EXISTS idx_errors_pattern     ON errors(pattern_id);
     CREATE INDEX IF NOT EXISTS idx_errors_type        ON errors(error_type);
+    CREATE INDEX IF NOT EXISTS idx_albums_artist      ON albums(artist_id);
+    CREATE INDEX IF NOT EXISTS idx_tracks_album       ON tracks(album_id);
+    CREATE INDEX IF NOT EXISTS idx_tracks_genre       ON tracks(genre_id);
+    CREATE INDEX IF NOT EXISTS idx_invoices_customer   ON invoices(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
   `)
 
   return db

@@ -1,4 +1,4 @@
-export const DEFAULT_MODEL = 'deepseek-chat'
+export const DEFAULT_MODEL = 'deepseek-v4-flash'
 export const DEFAULT_PROVIDER = 'deepseek'
 
 export const PROVIDERS = ['deepseek', 'openai', 'anthropic'] as const
