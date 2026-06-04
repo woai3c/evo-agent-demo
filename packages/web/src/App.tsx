@@ -16,10 +16,10 @@ export function App() {
           Evo
         </Link>
         <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">
-          Chat
+          对话
         </Link>
         <Link to="/admin" className="text-sm text-gray-600 hover:text-gray-900">
-          Admin
+          管理面板
         </Link>
       </nav>
 
