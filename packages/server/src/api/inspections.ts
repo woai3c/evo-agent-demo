@@ -1,13 +1,29 @@
 import { Hono } from 'hono'
 
+import { db } from '../db/index.js'
+import { runInspection } from '../evolution/inspector.js'
+
 export const inspectionsRoutes = new Hono()
 
 inspectionsRoutes.get('/', async (c) => {
-  // TODO: list inspection records
-  return c.json({ inspections: [] })
+  const rows = db.prepare('SELECT * FROM inspections ORDER BY round DESC').all() as Record<string, unknown>[]
+
+  const inspections = rows.map((r) => ({
+    ...r,
+    tokens_used: r.tokens_used ? JSON.parse(r.tokens_used as string) : null,
+    details: r.details ? JSON.parse(r.details as string) : null,
+  }))
+
+  return c.json({ inspections })
 })
 
 inspectionsRoutes.post('/run', async (c) => {
-  // TODO: trigger an inspection round
-  return c.json({ message: 'inspection triggered' })
+  try {
+    const inspectionId = await runInspection()
+    const inspection = db.prepare('SELECT * FROM inspections WHERE inspection_id = ?').get(inspectionId)
+    return c.json({ inspectionId, inspection })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return c.json({ error: `Inspection failed: ${message}` }, 500)
+  }
 })
