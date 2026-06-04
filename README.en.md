@@ -31,7 +31,7 @@ pnpm inspect
 pnpm simulate && pnpm inspect
 ```
 
-This is the core "aha moment" of the book: simulate traffic → errors occur → inspector discovers patterns → auto-fix → coverage rises.
+This is the core demo loop of the book: simulate traffic → errors occur → inspector discovers patterns → auto-fix → coverage rises.
 
 ## Architecture
 
