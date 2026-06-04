@@ -25,7 +25,7 @@ export function AdminTrends() {
 
   if (!hasOps && !hasErrors && !hasPatterns) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6">
         <h1 className="text-2xl font-bold mb-6">进化趋势</h1>
         <p className="text-gray-400">数据不足，暂无法展示趋势。继续使用 Evo 来积累数据吧！</p>
       </div>
@@ -54,7 +54,7 @@ export function AdminTrends() {
   )
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">进化趋势</h1>
 
       <div className="space-y-8">

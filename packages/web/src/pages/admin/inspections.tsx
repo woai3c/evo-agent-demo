@@ -40,7 +40,7 @@ export function AdminInspections() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">巡检记录</h1>
         <button

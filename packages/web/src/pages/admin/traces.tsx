@@ -63,7 +63,7 @@ export function AdminTraces() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Trace 浏览器</h1>
         <span className="text-sm text-gray-400">共 {total} 条</span>

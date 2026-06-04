@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from 'react-router-dom'
 
+import { AdminLayout } from './components/admin/AdminLayout'
 import { AdminErrors } from './pages/admin/errors'
 import { AdminInspections } from './pages/admin/inspections'
 import { AdminOverview } from './pages/admin/overview'
@@ -25,12 +26,14 @@ export function App() {
 
       <Routes>
         <Route path="/" element={<Chat />} />
-        <Route path="/admin" element={<AdminOverview />} />
-        <Route path="/admin/traces" element={<AdminTraces />} />
-        <Route path="/admin/errors" element={<AdminErrors />} />
-        <Route path="/admin/patterns" element={<AdminPatterns />} />
-        <Route path="/admin/inspections" element={<AdminInspections />} />
-        <Route path="/admin/trends" element={<AdminTrends />} />
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<AdminOverview />} />
+          <Route path="traces" element={<AdminTraces />} />
+          <Route path="errors" element={<AdminErrors />} />
+          <Route path="patterns" element={<AdminPatterns />} />
+          <Route path="inspections" element={<AdminInspections />} />
+          <Route path="trends" element={<AdminTrends />} />
+        </Route>
       </Routes>
     </div>
   )

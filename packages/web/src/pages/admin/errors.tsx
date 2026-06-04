@@ -20,7 +20,7 @@ export function AdminErrors() {
   const hasData = data.buckets.length > 0 || data.topUnmatched.length > 0
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">错误分析</h1>
 
       {!hasData ? (

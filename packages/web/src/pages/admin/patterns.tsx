@@ -30,7 +30,7 @@ export function AdminPatterns() {
   }, [])
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Pattern 库</h1>
 
       {patterns.length === 0 ? (
