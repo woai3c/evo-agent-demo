@@ -1,7 +1,5 @@
 # Evo — 会自我进化的 AI Agent Harness Demo
 
-> 电子书《构建会自我进化的 AI Agent 产品》配套 Demo 项目。[English](./README.en.md)
-
 一个多工具 AI 工作助手，内置 **Operation Tracing**、**Error Pattern 自动识别** 和 **LLM 驱动的自动巡检** —— 演示 AI Agent Harness 如何通过生产数据实现自我进化。
 
 ## 快速开始
