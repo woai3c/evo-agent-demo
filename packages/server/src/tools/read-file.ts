@@ -11,7 +11,8 @@ const MAX_SIZE = 50_000
 
 export const readFileTool = tool({
   description:
-    'Read a user-uploaded document from the uploads directory. Supports .txt, .md, .csv, .json, and .log files.',
+    'Read a user-uploaded document from the uploads directory. Supports .txt, .md, .csv, .json, and .log files. ' +
+    'Files larger than 50,000 characters are truncated. Pass only the filename (e.g. "report.txt"), not a full path.',
   parameters: z.object({
     fileId: z.string().describe('File name in the uploads directory (e.g. "report.txt")'),
   }),

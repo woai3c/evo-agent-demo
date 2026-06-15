@@ -9,6 +9,8 @@ tracesRoutes.get('/', async (c) => {
   const status = c.req.query('status')
   const provider = c.req.query('provider')
   const userId = c.req.query('userId')
+  const from = c.req.query('from')
+  const to = c.req.query('to')
   const limit = Math.min(Number(c.req.query('limit')) || 50, 200)
   const offset = Number(c.req.query('offset')) || 0
 
@@ -26,6 +28,14 @@ tracesRoutes.get('/', async (c) => {
   if (userId) {
     where += ' AND user_id = ?'
     params.push(userId)
+  }
+  if (from) {
+    where += ' AND created_at >= ?'
+    params.push(from)
+  }
+  if (to) {
+    where += ' AND created_at <= ?'
+    params.push(to + ' 23:59:59')
   }
 
   const operations = db

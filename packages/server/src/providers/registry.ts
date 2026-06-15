@@ -19,6 +19,27 @@ export function getModel(provider: ProviderName, modelId: string): LanguageModel
       const anthropic = createAnthropic({ apiKey: requireEnv('ANTHROPIC_API_KEY') })
       return anthropic(modelId)
     }
+    case 'alibaba': {
+      const alibaba = createOpenAI({
+        apiKey: requireEnv('ALIBABA_API_KEY'),
+        baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      })
+      return alibaba(modelId)
+    }
+    case 'zhipu': {
+      const zhipu = createOpenAI({
+        apiKey: requireEnv('ZHIPU_API_KEY'),
+        baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+      })
+      return zhipu(modelId)
+    }
+    case 'moonshotai': {
+      const moonshot = createOpenAI({
+        apiKey: requireEnv('MOONSHOT_API_KEY'),
+        baseURL: 'https://api.moonshot.cn/v1',
+      })
+      return moonshot(modelId)
+    }
     default:
       throw new Error(`Unknown provider: ${provider}`)
   }

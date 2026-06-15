@@ -4,9 +4,13 @@ import { generateObject } from 'ai'
 
 import { z } from 'zod'
 
+import type { ProviderName } from '@evo/shared'
+
 import { db } from '../db/index.js'
 import { getModel } from '../providers/registry.js'
+import { estimateCost } from '../tracing/tracer.js'
 import { applyFixes } from './auto-fix.js'
+import { tuneContextStrategy } from './context-tuner.js'
 import { bucketErrors } from './error-bucketer.js'
 
 const PatternSuggestionSchema = z.object({
@@ -87,15 +91,12 @@ ${bucketSummary}
 
 4. Write user_message in Chinese (this is a Chinese-facing product).`
 
+  const provider = (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as ProviderName
+  const modelId = process.env.INSPECTOR_MODEL ?? process.env.DEFAULT_MODEL ?? 'deepseek-v4-flash'
+
   let result
   try {
-    const model = getModel(
-      (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as
-        | 'deepseek'
-        | 'openai'
-        | 'anthropic',
-      process.env.INSPECTOR_MODEL ?? process.env.DEFAULT_MODEL ?? 'deepseek-v4-flash',
-    )
+    const model = getModel(provider, modelId)
 
     result = await generateObject({
       model,
@@ -117,7 +118,15 @@ ${bucketSummary}
   const tokensUsed = JSON.stringify(
     result.usage ? { input: result.usage.promptTokens, output: result.usage.completionTokens, cached: 0 } : {},
   )
-  const cost = result.usage ? result.usage.promptTokens * 0.000001 + result.usage.completionTokens * 0.000003 : 0
+  const cost = result.usage
+    ? estimateCost(
+        { input: result.usage.promptTokens, output: result.usage.completionTokens, cached: 0 },
+        provider,
+        modelId,
+      )
+    : 0
+
+  const tuning = tuneContextStrategy()
 
   db.prepare(
     `UPDATE inspections SET
@@ -137,7 +146,7 @@ ${bucketSummary}
     tokensUsed,
     cost,
     summary,
-    JSON.stringify({ newPatterns: patterns, bugs }),
+    JSON.stringify({ newPatterns: patterns, bugs, tuning }),
     inspectionId,
   )
 

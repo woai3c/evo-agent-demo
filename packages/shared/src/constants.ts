@@ -1,7 +1,7 @@
 export const DEFAULT_MODEL = 'deepseek-v4-flash'
 export const DEFAULT_PROVIDER = 'deepseek'
 
-export const PROVIDERS = ['deepseek', 'openai', 'anthropic'] as const
+export const PROVIDERS = ['deepseek', 'openai', 'anthropic', 'alibaba', 'zhipu', 'moonshotai'] as const
 export type ProviderName = (typeof PROVIDERS)[number]
 
 export const TOOL_NAMES = ['webSearch', 'webFetch', 'readFile', 'codeRunner', 'dbQuery', 'sendEmail'] as const

@@ -90,5 +90,13 @@ export function backfillErrors(patternId: string, matchRule: MatchRule): number 
   }
 
   const result = db.prepare(`UPDATE errors SET pattern_id = ? ${where}`).run(patternId, ...params)
+
+  if (result.changes > 0) {
+    db.prepare("UPDATE patterns SET hit_count = hit_count + ?, last_seen = datetime('now') WHERE pattern_id = ?").run(
+      result.changes,
+      patternId,
+    )
+  }
+
   return result.changes
 }

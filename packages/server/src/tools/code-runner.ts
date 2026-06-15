@@ -6,7 +6,10 @@ import { z } from 'zod'
 
 export const codeRunnerTool = tool({
   description:
-    'Execute a JavaScript code snippet in a sandboxed environment and return stdout output. Useful for calculations, data processing, and quick scripts.',
+    'Execute a JavaScript code snippet in a restricted VM context (node:vm) and return stdout output. ' +
+    'Useful for calculations, data transformations, formatting, JSON processing, and quick prototyping. ' +
+    'Available globals: console, Math, Date, JSON, Array, Object, String, Number, Map, Set, Promise, RegExp. ' +
+    'Use console.log() to produce output. No require/import, no filesystem, no network access.',
   parameters: z.object({
     code: z.string().describe('JavaScript code to execute'),
     timeout: z.number().optional().default(5000).describe('Execution timeout in milliseconds (max 10000)'),

@@ -11,4 +11,10 @@ if (!existsSync(dir)) {
   mkdirSync(dir, { recursive: true })
 }
 
+// Ensure uploads directory exists alongside the database
+const uploadsDir = resolve('data', 'uploads')
+if (!existsSync(uploadsDir)) {
+  mkdirSync(uploadsDir, { recursive: true })
+}
+
 export const db: Database.Database = initDatabase(dbPath)

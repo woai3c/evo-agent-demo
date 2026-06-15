@@ -39,10 +39,19 @@ export function AdminInspections() {
     }
   }
 
+  const totalCost = inspections.reduce((sum, i) => sum + i.cost, 0)
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">巡检记录</h1>
+        <div>
+          <h1 className="text-2xl font-bold">巡检记录</h1>
+          {inspections.length > 0 && (
+            <p className="text-sm text-gray-500 mt-1">
+              共 {inspections.length} 轮，累计成本 ¥{totalCost.toFixed(4)}
+            </p>
+          )}
+        </div>
         <button
           onClick={triggerInspection}
           disabled={running}
@@ -76,7 +85,7 @@ export function AdminInspections() {
                     <p className="text-xs text-gray-400 mt-0.5">{insp.started_at}</p>
                   </div>
                 </div>
-                <span className="text-xs text-gray-400">${insp.cost.toFixed(4)}</span>
+                <span className="text-xs text-gray-400">¥{insp.cost.toFixed(4)}</span>
               </button>
 
               {expandedId === insp.inspection_id && (

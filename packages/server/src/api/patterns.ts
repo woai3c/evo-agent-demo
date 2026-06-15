@@ -68,11 +68,16 @@ patternsRoutes.patch('/:patternId', async (c) => {
   const fields: string[] = []
   const params: unknown[] = []
 
-  for (const key of ['status', 'user_message', 'resolution', 'name'] as const) {
+  for (const key of ['status', 'user_message', 'resolution', 'name', 'category', 'provider', 'error_type'] as const) {
     if (body[key] !== undefined) {
       fields.push(`${key} = ?`)
       params.push(body[key])
     }
+  }
+
+  if (body.match_rule !== undefined) {
+    fields.push('match_rule = ?')
+    params.push(JSON.stringify(body.match_rule))
   }
 
   if (fields.length === 0) {

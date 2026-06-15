@@ -3,21 +3,33 @@ import type { CoreMessage } from 'ai'
 
 import type { ProviderName, StreamEvent, ToolName } from '@evo/shared'
 
+import { compressMessages } from '../context/compression.js'
 import { db } from '../db/index.js'
 import { getModel } from '../providers/registry.js'
 import { Tracer } from '../tracing/tracer.js'
 import { makeTools } from './dispatch.js'
 
-const SYSTEM_PROMPT = `You are Evo, a helpful multi-tool AI work assistant. You can:
-- Search the web for information (webSearch)
-- Fetch and read web pages (webFetch)
-- Read user-uploaded documents (readFile)
-- Execute JavaScript code snippets (codeRunner)
-- Query the Chinook music database with SQL (dbQuery)
-- Send simulated emails (sendEmail)
+const CURRENT_YEAR = new Date().getFullYear()
 
-Use these tools when they would help answer the user's question. Be concise and helpful.
-When using dbQuery, write standard SQL SELECT statements for the Chinook database.`
+const SYSTEM_PROMPT = `You are Evo, a multi-tool AI work assistant. The current year is ${CURRENT_YEAR}.
+
+## Tools
+
+You have access to these tools — use them proactively when they can help answer the user's question:
+
+- **webSearch**: Search the web for real-time information. When searching for recent/latest/current topics, include the year "${CURRENT_YEAR}" in your query for better results.
+- **webFetch**: Fetch a web page and extract its text content. Use this after webSearch to read full articles or documentation. When summarizing fetched content, preserve key details, concrete examples, and structure — don't over-compress.
+- **readFile**: Read a user-uploaded document from the uploads directory.
+- **codeRunner**: Execute JavaScript code in a restricted VM context (node:vm). Use for calculations, data transformations, formatting, and quick prototyping. No filesystem or network access.
+- **dbQuery**: Run read-only SQL SELECT queries against the Chinook demo database (a digital music store with artists, albums, tracks, genres, customers, invoices, etc.). Always use standard SQL. If the user asks about data without specifying a table, explore the schema first.
+- **sendEmail**: Send a simulated email (recorded but not actually delivered). Only use when the user explicitly asks to send an email.
+
+## Guidelines
+
+- Be concise and helpful. Reply in the same language the user uses.
+- When a question can be answered with tools, use them instead of relying on your training data — especially for real-time information, specific data queries, and calculations.
+- For multi-step tasks, think about which tools to combine. For example: webSearch to find URLs, then webFetch to read content; or dbQuery to get data, then codeRunner to process it.
+- If a tool call fails, explain the error to the user and suggest alternatives rather than silently retrying.`
 
 interface AgentLoopParams {
   userId: string
@@ -35,8 +47,11 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
   const row = db.prepare('SELECT messages FROM conversations WHERE conversation_id = ?').get(conversationId) as
     | { messages: string }
     | undefined
-  const messages: CoreMessage[] = row ? JSON.parse(row.messages) : []
-  messages.push({ role: 'user', content: userMessage })
+  const rawMessages: CoreMessage[] = row ? JSON.parse(row.messages) : []
+  rawMessages.push({ role: 'user', content: userMessage })
+
+  const messages = compressMessages(rawMessages)
+  const compressionTriggered = messages.length < rawMessages.length
 
   const llmModel = getModel(provider, modelId)
   const tools = makeTools(userId)
@@ -74,9 +89,12 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           break
 
         case 'tool-result': {
-          const outputSize = JSON.stringify(part.result).length
-          const success = !part.result?.error
-          tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize)
+          const resultStr = JSON.stringify(part.result)
+          const outputSize = resultStr.length
+          const resultObj = part.result as Record<string, unknown> | undefined
+          const errorMsg = resultObj && typeof resultObj.error === 'string' ? resultObj.error : undefined
+          const success = !errorMsg
+          tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize, errorMsg)
           yield {
             type: 'tool-result',
             toolName: part.toolName as ToolName,
@@ -88,10 +106,19 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
 
         case 'step-finish':
           if (part.usage) {
-            tracer.onStepFinish({
-              promptTokens: part.usage.promptTokens,
-              completionTokens: part.usage.completionTokens,
-            })
+            const totalUsed = part.usage.promptTokens + part.usage.completionTokens
+            const maxWindow = 128_000
+            tracer.onStepFinish(
+              {
+                promptTokens: part.usage.promptTokens,
+                completionTokens: part.usage.completionTokens,
+              },
+              {
+                totalTokens: totalUsed,
+                windowUsagePct: totalUsed / maxWindow,
+                compressionTriggered,
+              },
+            )
           }
           break
 
@@ -104,7 +131,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
     }
 
     const response = await result.response
-    const allMessages = [...messages, ...response.messages]
+    const allMessages = [...rawMessages, ...response.messages]
 
     db.prepare('UPDATE conversations SET messages = ?, updated_at = datetime(?) WHERE conversation_id = ?').run(
       JSON.stringify(allMessages),

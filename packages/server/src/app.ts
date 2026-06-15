@@ -6,6 +6,7 @@ import { dashboardRoutes } from './api/dashboard.js'
 import { inspectionsRoutes } from './api/inspections.js'
 import { patternsRoutes } from './api/patterns.js'
 import { tracesRoutes } from './api/traces.js'
+import { uploadsRoutes } from './api/uploads.js'
 
 export const app = new Hono()
 
@@ -18,3 +19,4 @@ app.route('/api/traces', tracesRoutes)
 app.route('/api/patterns', patternsRoutes)
 app.route('/api/inspections', inspectionsRoutes)
 app.route('/api/dashboard', dashboardRoutes)
+app.route('/api/uploads', uploadsRoutes)

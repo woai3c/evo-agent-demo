@@ -9,7 +9,8 @@ import { db } from '../db/index.js'
 export function makeSendEmailTool(userId: string) {
   return tool({
     description:
-      'Send an email (simulated). The email is recorded in the system but not actually delivered. Use only when the user explicitly asks to send an email.',
+      'Send a simulated email — recorded in the system but not actually delivered. ' +
+      'Use ONLY when the user explicitly asks to send an email. Do not call this tool proactively.',
     parameters: z.object({
       to: z.string().email().describe('Recipient email address'),
       subject: z.string().max(200).describe('Email subject line'),

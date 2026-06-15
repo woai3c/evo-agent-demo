@@ -1,8 +1,16 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { fetchTraceDetail, fetchTraces } from '../../lib/admin-api'
+
+function formatLocalTime(utcStr: string): string {
+  const d = new Date(utcStr.endsWith('Z') ? utcStr : utcStr + 'Z')
+  if (isNaN(d.getTime())) return utcStr
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
 interface OperationRow {
   operation_id: string
@@ -26,6 +34,7 @@ interface StepRow {
   tokens: { input: number; output: number } | null
   toolName: string | null
   toolInput: Record<string, unknown> | null
+  toolOutputSize: number | null
   toolSuccess: boolean | null
   error: { code: string; message: string } | null
 }
@@ -37,20 +46,35 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function AdminTraces() {
+  const [searchParams] = useSearchParams()
   const [operations, setOperations] = useState<OperationRow[]>([])
   const [total, setTotal] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [steps, setSteps] = useState<StepRow[]>([])
-  const [filter, setFilter] = useState({ status: '', provider: '' })
+  const [filter, setFilter] = useState({ status: '', provider: '', from: '', to: '' })
 
   useEffect(() => {
-    fetchTraces({ status: filter.status || undefined, provider: filter.provider || undefined, limit: 50 }).then(
-      (data) => {
-        setOperations(data.operations)
-        setTotal(data.total)
-      },
-    )
+    fetchTraces({
+      status: filter.status || undefined,
+      provider: filter.provider || undefined,
+      from: filter.from || undefined,
+      to: filter.to || undefined,
+      limit: 50,
+    }).then((data) => {
+      setOperations(data.operations)
+      setTotal(data.total)
+    })
   }, [filter])
+
+  useEffect(() => {
+    const opId = searchParams.get('op')
+    if (opId && !expandedId) {
+      fetchTraceDetail(opId).then((data) => {
+        setSteps(data.steps)
+        setExpandedId(opId)
+      })
+    }
+  }, [searchParams, expandedId])
 
   const toggleExpand = async (opId: string) => {
     if (expandedId === opId) {
@@ -69,7 +93,7 @@ export function AdminTraces() {
         <span className="text-sm text-gray-400">共 {total} 条</span>
       </div>
 
-      <div className="flex gap-3 mb-4">
+      <div className="flex flex-wrap gap-3 mb-4">
         <select
           value={filter.status}
           onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value }))}
@@ -88,7 +112,34 @@ export function AdminTraces() {
           <option value="deepseek">DeepSeek</option>
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option>
+          <option value="alibaba">Alibaba (Qwen)</option>
+          <option value="zhipu">Zhipu (GLM)</option>
+          <option value="moonshotai">Moonshot (Kimi)</option>
         </select>
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="text-gray-500">从</span>
+          <input
+            type="date"
+            value={filter.from}
+            onChange={(e) => setFilter((f) => ({ ...f, from: e.target.value }))}
+            className="rounded-md border px-2 py-1 text-sm"
+          />
+          <span className="text-gray-500">至</span>
+          <input
+            type="date"
+            value={filter.to}
+            onChange={(e) => setFilter((f) => ({ ...f, to: e.target.value }))}
+            className="rounded-md border px-2 py-1 text-sm"
+          />
+          {(filter.from || filter.to) && (
+            <button
+              onClick={() => setFilter((f) => ({ ...f, from: '', to: '' }))}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              清除
+            </button>
+          )}
+        </div>
       </div>
 
       {operations.length === 0 ? (
@@ -138,8 +189,8 @@ export function AdminTraces() {
                     <td className="px-4 py-2 text-right">
                       {((op.total_tokens.input + op.total_tokens.output) / 1000).toFixed(1)}k
                     </td>
-                    <td className="px-4 py-2 text-right">${op.cost.toFixed(4)}</td>
-                    <td className="px-4 py-2 text-xs text-gray-400">{op.created_at}</td>
+                    <td className="px-4 py-2 text-right">¥{op.cost.toFixed(4)}</td>
+                    <td className="px-4 py-2 text-xs text-gray-400">{formatLocalTime(op.created_at)}</td>
                   </tr>
                   {expandedId === op.operation_id && (
                     <tr key={`${op.operation_id}-detail`}>
@@ -162,30 +213,78 @@ function StepTimeline({ steps }: { steps: StepRow[] }) {
   if (steps.length === 0) return <p className="text-gray-400 text-sm">无步骤数据</p>
 
   return (
-    <div className="space-y-1 font-mono text-xs">
-      {steps.map((step) => (
-        <div key={step.stepId} className="flex items-start gap-2">
-          <span className="text-gray-400 w-16">Step {step.stepIndex}</span>
-          <span className={`w-20 ${step.type === 'call_llm' ? 'text-blue-600' : 'text-purple-600'}`}>
-            [{step.type === 'call_llm' ? 'LLM' : 'Tool'}]
-          </span>
-          <span className="flex-1">
-            {step.toolName && <span className="font-semibold">{step.toolName} </span>}
-            {step.tokens && (
-              <span className="text-gray-500">
-                in:{step.tokens.input} out:{step.tokens.output}
-              </span>
-            )}
-            {step.toolSuccess != null && (
-              <span className={step.toolSuccess ? 'text-green-600' : 'text-red-600'}>
-                {step.toolSuccess ? ' ✓' : ' ✗'}
-              </span>
-            )}
-            {step.error && <span className="text-red-500"> {step.error.message}</span>}
-          </span>
-          <span className="text-gray-400">{step.durationMs}ms</span>
-        </div>
-      ))}
+    <div className="space-y-0.5 text-xs">
+      {steps.map((step, i) => {
+        const isLast = i === steps.length - 1
+        const isLLM = step.type === 'call_llm'
+        return (
+          <div key={step.stepId} className="flex items-stretch gap-0">
+            {/* tree connector */}
+            <div className="w-6 flex flex-col items-center shrink-0">
+              <div className={`w-px flex-1 ${i === 0 ? 'bg-transparent' : 'bg-gray-300'}`} />
+              <div
+                className={`w-2.5 h-2.5 rounded-full shrink-0 border-2 ${
+                  step.error
+                    ? 'border-red-400 bg-red-50'
+                    : isLLM
+                      ? 'border-blue-400 bg-blue-50'
+                      : 'border-purple-400 bg-purple-50'
+                }`}
+              />
+              <div className={`w-px flex-1 ${isLast ? 'bg-transparent' : 'bg-gray-300'}`} />
+            </div>
+
+            {/* content */}
+            <div className="flex-1 py-1.5 pl-2 min-w-0">
+              {/* header row */}
+              <div className="flex items-center gap-2 font-mono">
+                <span className="text-gray-400">Step {step.stepIndex}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                    isLLM ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                  }`}
+                >
+                  {isLLM ? 'LLM' : 'Tool'}
+                </span>
+                {step.toolName && <span className="font-semibold text-gray-700">{step.toolName}</span>}
+                {step.toolSuccess != null && (
+                  <span className={`font-bold ${step.toolSuccess ? 'text-green-600' : 'text-red-500'}`}>
+                    {step.toolSuccess ? '✓' : '✗'}
+                  </span>
+                )}
+                <span className="ml-auto text-gray-400 tabular-nums">{step.durationMs}ms</span>
+              </div>
+
+              {/* detail rows */}
+              <div className="mt-0.5 space-y-0.5 text-gray-500 font-mono">
+                {step.tokens && (
+                  <div>
+                    Tokens: in:{step.tokens.input.toLocaleString()} out:{step.tokens.output.toLocaleString()}
+                  </div>
+                )}
+                {step.toolInput && (
+                  <div className="truncate max-w-2xl" title={JSON.stringify(step.toolInput)}>
+                    输入: {JSON.stringify(step.toolInput)}
+                  </div>
+                )}
+                {step.toolOutputSize != null && (
+                  <div>
+                    输出大小:{' '}
+                    {step.toolOutputSize >= 1024
+                      ? `${(step.toolOutputSize / 1024).toFixed(1)} KB`
+                      : `${step.toolOutputSize} B`}
+                  </div>
+                )}
+                {step.error && (
+                  <div className="text-red-500">
+                    错误: [{step.error.code}] {step.error.message}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

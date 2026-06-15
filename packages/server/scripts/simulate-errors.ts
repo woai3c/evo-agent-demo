@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid'
 
 import { db } from '../src/db/index.js'
 
-const PROVIDERS = ['deepseek', 'openai', 'anthropic'] as const
+const PROVIDERS = ['deepseek', 'openai', 'anthropic', 'alibaba', 'zhipu', 'moonshotai'] as const
 const USERS = ['demo-user-1', 'demo-user-2', 'demo-user-3']
 
 interface SimulatedTrace {
@@ -33,12 +33,15 @@ function generateTraces(count: number): SimulatedTrace[] {
 
   for (let i = 0; i < count; i++) {
     const provider = randomChoice(PROVIDERS)
-    const model =
-      provider === 'deepseek'
-        ? 'deepseek-v4-flash'
-        : provider === 'openai'
-          ? randomChoice(['gpt-5.4-mini', 'gpt-5.4'])
-          : 'claude-sonnet-4-6'
+    const modelMap: Record<string, string[]> = {
+      deepseek: ['deepseek-v4-flash'],
+      openai: ['gpt-5.4-mini', 'gpt-5.4'],
+      anthropic: ['claude-sonnet-4-6'],
+      alibaba: ['qwen-max', 'qwen-plus'],
+      zhipu: ['glm-4-plus', 'glm-4-flash'],
+      moonshotai: ['kimi-k2.5'],
+    }
+    const model = randomChoice(modelMap[provider] ?? ['unknown'])
 
     const isError = Math.random() < 0.35
 

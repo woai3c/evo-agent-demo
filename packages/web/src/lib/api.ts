@@ -1,5 +1,16 @@
 const BASE = '/api'
 
+export async function uploadFile(file: File): Promise<{ fileId: string; size: number }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${BASE}/uploads`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Upload failed' }))
+    throw new Error(data.error || `Upload failed: ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function fetchConversations(userId: string) {
   const res = await fetch(`${BASE}/chat/conversations?userId=${encodeURIComponent(userId)}`)
   if (!res.ok) throw new Error(`Failed to fetch conversations: ${res.status}`)

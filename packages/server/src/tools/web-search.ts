@@ -3,7 +3,11 @@ import { tool } from 'ai'
 import { z } from 'zod'
 
 export const webSearchTool = tool({
-  description: 'Search the web using a search engine. Returns a list of results with titles, URLs, and snippets.',
+  description:
+    `Search the web for information. Useful for looking up documentation, error messages, news, or any current information. ` +
+    `The current year is ${new Date().getFullYear()} — include it in queries about recent/latest/current topics ` +
+    `(e.g. prefer "React 19 release notes ${new Date().getFullYear()}" over "React latest release notes"). ` +
+    `Returns a list of results with titles, URLs, and snippets.`,
   parameters: z.object({
     query: z.string().describe('The search query'),
     maxResults: z.number().optional().default(5).describe('Maximum number of results (1-10)'),

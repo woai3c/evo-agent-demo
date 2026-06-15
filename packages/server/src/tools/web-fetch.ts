@@ -22,7 +22,9 @@ function stripHtml(html: string): string {
 
 export const webFetchTool = tool({
   description:
-    'Fetch a web page by URL and return its text content. Useful for reading articles, documentation, or any public web page.',
+    `Fetch a web page by URL and return its text content. Useful for reading articles, documentation, or any public web page after finding URLs via webSearch. ` +
+    `When summarizing the returned content for the user, preserve key details, concrete examples, section structure, and numbers — don't over-compress. ` +
+    `Content is capped at 20,000 characters; longer pages are truncated.`,
   parameters: z.object({
     url: z.string().url().describe('The URL to fetch'),
   }),

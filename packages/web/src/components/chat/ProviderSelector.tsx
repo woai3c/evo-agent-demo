@@ -9,8 +9,8 @@ const PROVIDER_MODELS: Record<string, { label: string; models: { id: string; lab
   deepseek: {
     label: 'DeepSeek',
     models: [
-      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-      { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+      { id: 'deepseek-v4-flash', label: 'V4 Flash' },
+      { id: 'deepseek-v4-pro', label: 'V4 Pro' },
     ],
   },
   openai: {
@@ -24,9 +24,28 @@ const PROVIDER_MODELS: Record<string, { label: string; models: { id: string; lab
   anthropic: {
     label: 'Anthropic',
     models: [
-      { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-      { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+      { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+      { id: 'claude-opus-4-6', label: 'Opus 4.6' },
     ],
+  },
+  alibaba: {
+    label: 'Qwen (通义)',
+    models: [
+      { id: 'qwen-max', label: 'Qwen Max' },
+      { id: 'qwen-plus', label: 'Qwen Plus' },
+      { id: 'qwen-turbo', label: 'Qwen Turbo' },
+    ],
+  },
+  zhipu: {
+    label: 'GLM (智谱)',
+    models: [
+      { id: 'glm-4-plus', label: 'GLM-4 Plus' },
+      { id: 'glm-4-flash', label: 'GLM-4 Flash' },
+    ],
+  },
+  moonshotai: {
+    label: 'Kimi (月之暗面)',
+    models: [{ id: 'kimi-k2.5', label: 'Kimi K2.5' }],
   },
 }
 
