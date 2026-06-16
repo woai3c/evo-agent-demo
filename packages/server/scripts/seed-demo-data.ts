@@ -1,8 +1,12 @@
 // Seed the Chinook demo dataset + create demo users
 // Run: pnpm db:seed
-import 'dotenv/config'
+import { config } from 'dotenv'
+
+import { resolve } from 'node:path'
 
 import { db } from '../src/db/index.js'
+
+config({ path: resolve(import.meta.dirname, '../../../.env') })
 
 console.log('Seeding demo data...')
 

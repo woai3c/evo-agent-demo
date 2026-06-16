@@ -62,6 +62,14 @@ export interface SSECallbacks {
 
 async function consumeSSE(url: string, callbacks: SSECallbacks): Promise<unknown> {
   const res = await fetch(url, { method: 'POST' })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    const msg = body.error ?? `HTTP ${res.status}`
+    callbacks.onError?.(msg)
+    return null
+  }
+
   if (!res.body) throw new Error('No response body')
 
   const reader = res.body.getReader()

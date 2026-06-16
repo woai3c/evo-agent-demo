@@ -2,10 +2,14 @@
 // Requires the server to be running (pnpm dev:server).
 // Run: pnpm simulate [count]        — send real conversations (calls LLM API, costs tokens)
 //      pnpm simulate --mock [count] — insert mock trace data (no API calls, free)
-import 'dotenv/config'
+import { config } from 'dotenv'
 import { nanoid } from 'nanoid'
 
+import { resolve } from 'node:path'
+
 import { db } from '../src/db/index.js'
+
+config({ path: resolve(import.meta.dirname, '../../../.env') })
 
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000'
 const args = process.argv.slice(2)

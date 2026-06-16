@@ -2,10 +2,14 @@
 // 1. Run `pnpm inspect` first to discover harness bugs
 // 2. Run `pnpm autofix` to generate fix PRs
 // Run: pnpm autofix
-import 'dotenv/config'
+import { config } from 'dotenv'
+
+import { resolve } from 'node:path'
 
 import { db } from '../src/db/index.js'
 import { runAutoFix } from '../src/evolution/auto-pr.js'
+
+config({ path: resolve(import.meta.dirname, '../../../.env') })
 
 const unfixed = db
   .prepare(

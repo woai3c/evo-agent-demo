@@ -3,10 +3,14 @@
 // 2. Run `pnpm inspect` to see patterns discovered
 // 3. Open admin dashboard to see trends update
 // Run: pnpm inspect
-import 'dotenv/config'
+import { config } from 'dotenv'
+
+import { resolve } from 'node:path'
 
 import { db } from '../src/db/index.js'
 import { runInspection } from '../src/evolution/inspector.js'
+
+config({ path: resolve(import.meta.dirname, '../../../.env') })
 
 const errorCount = (db.prepare('SELECT COUNT(*) as c FROM errors WHERE pattern_id IS NULL').get() as { c: number }).c
 console.log(`Found ${errorCount} unmatched errors. Running inspection...`)

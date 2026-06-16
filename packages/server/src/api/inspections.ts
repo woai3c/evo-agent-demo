@@ -35,6 +35,16 @@ inspectionsRoutes.post('/run', async (c) => {
 })
 
 inspectionsRoutes.post('/autofix', async (c) => {
+  if (process.argv.some((a) => a.includes('watch'))) {
+    return c.json(
+      {
+        error:
+          '自动修复会修改源码文件，在 dev 模式（tsx watch）下会触发服务重启导致修复中断。请使用 pnpm autofix 命令单独运行。',
+      },
+      400,
+    )
+  }
+
   return streamSSE(c, async (stream) => {
     try {
       const results = await runAutoFix((msg) => {
