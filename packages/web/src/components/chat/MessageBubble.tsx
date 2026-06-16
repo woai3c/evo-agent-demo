@@ -1,4 +1,5 @@
 import { Bot, User } from 'lucide-react'
+import remarkGfm from 'remark-gfm'
 
 import Markdown from 'react-markdown'
 
@@ -33,7 +34,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
             ))}
             {message.content && (
               <div className="rounded-2xl rounded-tl-sm bg-white border px-4 py-2 text-sm prose prose-sm prose-gray max-w-none">
-                <Markdown>{message.content}</Markdown>
+                <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
               </div>
             )}
             {message.isStreaming && !message.content && !message.toolCalls?.length && (
