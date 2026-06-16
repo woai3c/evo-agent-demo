@@ -223,6 +223,7 @@ ${operationLines}
 3. Name each behavior concisely (e.g. "Web Research + Summary", "Database Query", "Code Execution")
 4. Include the operation_ids that belong to each behavior
 5. Describe what the behavior pattern does in 1-2 sentences`,
+    abortSignal: AbortSignal.timeout(300_000),
   })
 
   const totalTokensUsed = {
@@ -310,6 +311,7 @@ ${unhealthyDesc}
 3. Be specific and actionable — avoid vague advice like "optimize performance"
 4. Focus on what the Harness code can do differently, NOT what the LLM prompt should say
 5. Set severity to "critical" ONLY when the fix is concrete and clearly actionable as a code change (e.g. "add retry with backoff to webFetch tool", "add input validation to dbQuery"). Set to "suggestion" for advisory or less certain improvements.`,
+        abortSignal: AbortSignal.timeout(300_000),
       })
 
       totalTokensUsed.input += suggestionResult.usage?.promptTokens ?? 0

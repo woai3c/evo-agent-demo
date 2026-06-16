@@ -206,6 +206,7 @@ ${PROJECT_STRUCTURE}
 ${target.locatorPromptExtra}
 
 Which source files need to be modified? List 1-5 files.`,
+        abortSignal: AbortSignal.timeout(300_000),
       })
 
       const filePaths = locatorResult.object.files.map((f) => f.path)
@@ -257,6 +258,7 @@ ${fileContext}
 2. Make minimal, focused changes — fix only the issue described, don't refactor unrelated code.
 3. Write commit message in conventional commits format.
 4. Write PR title and body in English.`,
+        abortSignal: AbortSignal.timeout(300_000),
       })
 
       log(`${tag} LLM 生成 ${fixResult.object.changes.length} 个代码变更`)

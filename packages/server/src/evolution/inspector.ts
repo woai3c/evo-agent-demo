@@ -121,6 +121,7 @@ ${bucketSummary}
         model,
         schema: PatternSuggestionSchema,
         prompt,
+        abortSignal: AbortSignal.timeout(300_000),
       })
 
       patterns = result.object.patterns
