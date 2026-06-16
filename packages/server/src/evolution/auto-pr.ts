@@ -3,7 +3,7 @@ import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-import { generateObject } from 'ai'
+import { streamObject } from 'ai'
 
 import { z } from 'zod'
 
@@ -82,6 +82,53 @@ function hasRemote(): boolean {
   return gitSafe('remote get-url origin') !== null
 }
 
+// ── Streaming helper ──
+
+async function streamGenerate<T extends z.ZodType>(opts: {
+  model: ReturnType<typeof getModel>
+  schema: T
+  prompt: string
+  log: ProgressCallback
+  tag: string
+  timeoutMs?: number
+}): Promise<{ object: z.infer<T>; usage?: { promptTokens: number; completionTokens: number } }> {
+  const { model, schema, prompt, log, tag, timeoutMs = 300_000 } = opts
+  const abort = AbortSignal.timeout(timeoutMs)
+  const start = Date.now()
+
+  const { partialObjectStream, object, usage } = streamObject({
+    model,
+    schema,
+    prompt,
+    abortSignal: abort,
+  })
+
+  let lastLogTime = 0
+  let tokenCount = 0
+  for await (const _partial of partialObjectStream) {
+    tokenCount++
+    const now = Date.now()
+    if (now - lastLogTime > 10_000) {
+      const elapsed = Math.round((now - start) / 1000)
+      log(`${tag} LLM 生成中...（${elapsed}s）`)
+      lastLogTime = now
+    }
+  }
+
+  const elapsed = Math.round((Date.now() - start) / 1000)
+  log(`${tag} LLM 响应完成（${elapsed}s）`)
+
+  const finalObject = await object
+  const finalUsage = await usage
+
+  return {
+    object: finalObject,
+    usage: finalUsage
+      ? { promptTokens: finalUsage.promptTokens, completionTokens: finalUsage.completionTokens }
+      : undefined,
+  }
+}
+
 // ── Fix Target ──
 
 interface FixTarget {
@@ -155,15 +202,6 @@ const PROJECT_STRUCTURE = `## Project structure:
 - packages/server/src/api/ — Hono API routes
 - packages/web/src/ — React frontend`
 
-function withHeartbeat<T>(promise: Promise<T>, log: ProgressCallback, prefix: string, intervalMs = 15_000): Promise<T> {
-  const start = Date.now()
-  const timer = setInterval(() => {
-    const elapsed = Math.round((Date.now() - start) / 1000)
-    log(`${prefix} 仍在等待 LLM 响应...（${elapsed}s）`)
-  }, intervalMs)
-  return promise.finally(() => clearInterval(timer))
-}
-
 export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFixResult[]> {
   const log = onProgress ?? (() => {})
 
@@ -205,24 +243,21 @@ export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFix
     try {
       // Step 1: Ask LLM which files to read
       log(`${tag} LLM 定位相关源码文件...`)
-      const locatorResult = await withHeartbeat(
-        generateObject({
-          model,
-          schema: FileLocatorSchema,
-          prompt: `You are improving an AI Agent demo project (TypeScript, Hono server, React frontend).
+      const locatorResult = await streamGenerate({
+        model,
+        schema: FileLocatorSchema,
+        prompt: `You are improving an AI Agent demo project (TypeScript, Hono server, React frontend).
 
 ${PROJECT_STRUCTURE}
 
 ${target.locatorPromptExtra}
 
 Which source files need to be modified? List 1-5 files.`,
-          abortSignal: AbortSignal.timeout(300_000),
-        }),
         log,
         tag,
-      )
+      })
 
-      const filePaths = locatorResult.object.files.map((f) => f.path)
+      const filePaths = locatorResult.object.files.map((f: { path: string }) => f.path)
       const fileContents: { path: string; content: string }[] = []
 
       for (const fp of filePaths) {
@@ -256,11 +291,10 @@ Which source files need to be modified? List 1-5 files.`,
       const contextChars = fileContext.length
       log(`${tag} LLM 生成代码修改方案...（上下文约 ${Math.round(contextChars / 1000)}k 字符）`)
 
-      const fixResult = await withHeartbeat(
-        generateObject({
-          model,
-          schema: CodeFixSchema,
-          prompt: `You are improving an AI Agent demo project. Generate precise code changes.
+      const fixResult = await streamGenerate({
+        model,
+        schema: CodeFixSchema,
+        prompt: `You are improving an AI Agent demo project. Generate precise code changes.
 
 ${target.fixPromptExtra}
 
@@ -273,33 +307,37 @@ ${fileContext}
 2. Make minimal, focused changes — fix only the issue described, don't refactor unrelated code.
 3. Write commit message in conventional commits format.
 4. Write PR title and body in English.`,
-          abortSignal: AbortSignal.timeout(300_000),
-        }),
         log,
         tag,
-      )
+      })
 
-      log(`${tag} LLM 生成 ${fixResult.object.changes.length} 个代码变更`)
+      const changes = fixResult.object.changes
+      log(`${tag} LLM 方案: ${changes.length} 个变更, commit: "${fixResult.object.commitMessage}"`)
+      for (const c of changes) {
+        log(`${tag}   - ${c.filePath}: ${c.explanation}`)
+      }
 
       // Step 3: Apply changes on a new branch
       log(`${tag} 创建分支: ${branchName}`)
       git(`checkout -b ${branchName} ${mainBranch}`)
 
       let applied = 0
-      for (const change of fixResult.object.changes) {
+      for (const change of changes) {
         try {
           const abs = resolve(PROJECT_ROOT, change.filePath)
           const original = readFileSync(abs, 'utf-8')
           if (!original.includes(change.searchBlock)) {
-            log(`${tag} 代码块未匹配，跳过: ${change.filePath}`)
+            log(
+              `${tag} ✗ 代码块未匹配: ${change.filePath}（searchBlock 前 80 字符: "${change.searchBlock.slice(0, 80)}..."）`,
+            )
             continue
           }
           const modified = original.replace(change.searchBlock, change.replaceBlock)
           writeFileSync(abs, modified, 'utf-8')
           applied++
-          log(`${tag} 已修改: ${change.filePath} — ${change.explanation}`)
+          log(`${tag} ✓ 已修改: ${change.filePath}`)
         } catch (e) {
-          log(`${tag} 修改失败: ${change.filePath} — ${e instanceof Error ? e.message : String(e)}`)
+          log(`${tag} ✗ 修改失败: ${change.filePath} — ${e instanceof Error ? e.message : String(e)}`)
         }
       }
 
@@ -314,7 +352,7 @@ ${fileContext}
           branch: branchName,
           prUrl: null,
           status: 'failed',
-          error: 'No code changes could be applied',
+          error: 'No code changes could be applied (searchBlock mismatch)',
         })
         continue
       }
