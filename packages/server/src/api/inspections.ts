@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 
 import { db } from '../db/index.js'
+import { runAutoFix } from '../evolution/auto-pr.js'
 import { runInspection } from '../evolution/inspector.js'
 
 export const inspectionsRoutes = new Hono()
@@ -25,5 +26,15 @@ inspectionsRoutes.post('/run', async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return c.json({ error: `Inspection failed: ${message}` }, 500)
+  }
+})
+
+inspectionsRoutes.post('/autofix', async (c) => {
+  try {
+    const results = await runAutoFix()
+    return c.json({ results })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return c.json({ error: `Auto-fix failed: ${message}` }, 500)
   }
 })

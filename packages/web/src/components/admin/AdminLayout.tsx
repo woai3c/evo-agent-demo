@@ -1,4 +1,13 @@
-import { Activity, AlertTriangle, FileSearch, LayoutDashboard, ScanSearch, Shield, TrendingUp } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  Boxes,
+  FileSearch,
+  LayoutDashboard,
+  ScanSearch,
+  Shield,
+  TrendingUp,
+} from 'lucide-react'
 
 import { NavLink, Outlet } from 'react-router-dom'
 
@@ -7,6 +16,7 @@ const NAV_ITEMS = [
   { to: '/admin/traces', label: 'Trace 浏览器', icon: FileSearch },
   { to: '/admin/errors', label: '错误分析', icon: AlertTriangle },
   { to: '/admin/patterns', label: 'Pattern 库', icon: Shield },
+  { to: '/admin/behaviors', label: '行为分析', icon: Boxes },
   { to: '/admin/inspections', label: '巡检记录', icon: ScanSearch },
   { to: '/admin/trends', label: '进化趋势', icon: TrendingUp },
 ]

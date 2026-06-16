@@ -44,8 +44,18 @@ export async function fetchTrends(days = 30) {
   return res.json()
 }
 
+export async function fetchBehaviors() {
+  const res = await fetch(`${BASE}/dashboard/behaviors`)
+  return res.json()
+}
+
 export async function fetchInspections() {
   const res = await fetch(`${BASE}/inspections`)
+  return res.json()
+}
+
+export async function triggerAutoFix() {
+  const res = await fetch(`${BASE}/inspections/autofix`, { method: 'POST' })
   return res.json()
 }
 

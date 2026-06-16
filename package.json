@@ -15,6 +15,7 @@
     "format:check": "prettier --check .",
     "db:seed": "pnpm --filter @evo/server run db:seed",
     "inspect": "pnpm --filter @evo/server run inspect",
+    "autofix": "pnpm --filter @evo/server run autofix",
     "simulate": "pnpm --filter @evo/server run simulate",
     "prepare": "husky"
   },

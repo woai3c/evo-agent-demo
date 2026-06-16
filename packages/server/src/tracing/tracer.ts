@@ -7,6 +7,7 @@ import { traceStore } from './store.js'
 
 interface TracerParams {
   userId: string
+  conversationId?: string
   provider: ProviderName
   model: string
 }
@@ -30,6 +31,7 @@ export class Tracer {
 
     traceStore.insertOperation({
       operationId: this.operationId,
+      conversationId: params.conversationId,
       userId: params.userId,
       model: params.model,
       provider: params.provider,

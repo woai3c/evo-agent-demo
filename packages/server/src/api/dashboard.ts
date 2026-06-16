@@ -119,6 +119,50 @@ dashboardRoutes.get('/errors', async (c) => {
   return c.json({ buckets, topUnmatched, byTool, dailyErrorTrend, recentErrors })
 })
 
+dashboardRoutes.get('/behaviors', async (c) => {
+  const behaviors = db
+    .prepare(
+      `SELECT behavior_id, name, description, tool_sequence, operation_count,
+              success_rate, avg_duration, avg_steps, avg_tokens, avg_cost,
+              tool_error_rate, health_score, health_flags, suggestion,
+              suggestion_severity, fix_status, fix_pr_url,
+              sample_operations, first_seen, last_seen, created_by
+       FROM behaviors ORDER BY operation_count DESC`,
+    )
+    .all() as Record<string, unknown>[]
+
+  const rows = behaviors.map((b) => ({
+    behaviorId: b.behavior_id,
+    name: b.name,
+    description: b.description,
+    toolSequence: b.tool_sequence,
+    operationCount: b.operation_count,
+    successRate: b.success_rate,
+    avgDuration: b.avg_duration,
+    avgSteps: b.avg_steps,
+    avgTokens: b.avg_tokens,
+    avgCost: b.avg_cost,
+    toolErrorRate: b.tool_error_rate,
+    healthScore: b.health_score,
+    healthFlags: JSON.parse((b.health_flags as string) || '[]'),
+    suggestion: b.suggestion,
+    suggestionSeverity: b.suggestion_severity ?? 'none',
+    fixStatus: b.fix_status ?? 'none',
+    fixPrUrl: b.fix_pr_url ?? null,
+    sampleOperations: JSON.parse((b.sample_operations as string) || '[]'),
+    firstSeen: b.first_seen,
+    lastSeen: b.last_seen,
+    createdBy: b.created_by,
+  }))
+
+  const totalBehaviors = rows.length
+  const unhealthyCount = rows.filter((b) => (b.healthScore as number) < 0.8).length
+  const avgHealthScore =
+    totalBehaviors > 0 ? rows.reduce((s, b) => s + (b.healthScore as number), 0) / totalBehaviors : 0
+
+  return c.json({ behaviors: rows, summary: { totalBehaviors, unhealthyCount, avgHealthScore } })
+})
+
 dashboardRoutes.get('/trends', async (c) => {
   const days = Number(c.req.query('days')) || 30
 

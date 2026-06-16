@@ -122,6 +122,32 @@ export interface HarnessBug {
   severity: 'low' | 'medium' | 'high'
 }
 
+// ── Behavior (semantic clustering + health evaluation) ──
+
+export interface Behavior {
+  behaviorId: string
+  name: string
+  description: string
+  toolSequence: string
+  operationCount: number
+  successRate: number
+  avgDuration: number
+  avgSteps: number
+  avgTokens: number
+  avgCost: number
+  toolErrorRate: number
+  healthScore: number
+  healthFlags: string[]
+  suggestion: string
+  suggestionSeverity: 'none' | 'critical' | 'suggestion'
+  fixStatus: 'none' | 'unfixed' | 'branch_created' | 'pr_created' | 'merged'
+  fixPrUrl: string | null
+  sampleOperations: string[]
+  firstSeen: string
+  lastSeen: string
+  createdBy: string
+}
+
 // ── Chat ──
 
 export interface Conversation {

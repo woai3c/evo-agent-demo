@@ -18,6 +18,8 @@ interface PatternRow {
   status: string
   created_by: string
   first_seen: string
+  fix_status: string
+  fix_pr_url: string | null
 }
 
 const CATEGORY_LABELS: Record<string, { text: string; color: string }> = {
@@ -291,6 +293,7 @@ export function AdminPatterns() {
                 <th className="px-4 py-2 text-left">错误类型</th>
                 <th className="px-4 py-2 text-right">匹配次数</th>
                 <th className="px-4 py-2 text-left">状态</th>
+                <th className="px-4 py-2 text-left">修复</th>
                 <th className="px-4 py-2 text-left">创建方式</th>
                 <th className="px-4 py-2 text-left">操作</th>
               </tr>
@@ -315,6 +318,42 @@ export function AdminPatterns() {
                       >
                         {p.status === 'active' ? '活跃' : p.status === 'resolved' ? '已解决' : p.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      {p.category === 'harness_bug' ? (
+                        p.fix_pr_url ? (
+                          <a
+                            href={p.fix_pr_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            PR 已创建
+                          </a>
+                        ) : (
+                          <span
+                            className={`text-xs rounded-full px-2 py-0.5 ${
+                              p.fix_status === 'unfixed'
+                                ? 'bg-red-100 text-red-600'
+                                : p.fix_status === 'branch_created'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : p.fix_status === 'merged'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {p.fix_status === 'unfixed'
+                              ? '待修复'
+                              : p.fix_status === 'branch_created'
+                                ? '已创建分支'
+                                : p.fix_status === 'merged'
+                                  ? '已合并'
+                                  : p.fix_status}
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-xs text-gray-500">{p.created_by}</td>
                     <td className="px-4 py-2">

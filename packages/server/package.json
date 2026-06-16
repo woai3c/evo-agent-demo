@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "db:seed": "tsx scripts/seed-demo-data.ts",
     "inspect": "tsx scripts/run-inspection.ts",
+    "autofix": "tsx scripts/run-autofix.ts",
     "simulate": "tsx scripts/simulate-errors.ts"
   },
   "dependencies": {

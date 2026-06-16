@@ -10,6 +10,7 @@ import { db } from '../db/index.js'
 import { getModel } from '../providers/registry.js'
 import { estimateCost } from '../tracing/tracer.js'
 import { applyFixes } from './auto-fix.js'
+import { analyzeBehaviors } from './behavior-analyzer.js'
 import { tuneContextStrategy } from './context-tuner.js'
 import { bucketErrors } from './error-bucketer.js'
 
@@ -115,10 +116,10 @@ ${bucketSummary}
   const { patterns, bugs, summary } = result.object
   const fixResult = applyFixes(patterns, inspectionId, round)
 
-  const tokensUsed = JSON.stringify(
+  let tokensUsed = JSON.stringify(
     result.usage ? { input: result.usage.promptTokens, output: result.usage.completionTokens, cached: 0 } : {},
   )
-  const cost = result.usage
+  let cost = result.usage
     ? estimateCost(
         { input: result.usage.promptTokens, output: result.usage.completionTokens, cached: 0 },
         provider,
@@ -127,6 +128,26 @@ ${bucketSummary}
     : 0
 
   const tuning = tuneContextStrategy()
+
+  // Phase 2: behavior clustering + health evaluation
+  let behaviorAnalysis = null
+  try {
+    behaviorAnalysis = await analyzeBehaviors()
+    if (behaviorAnalysis.tokensUsed.input > 0) {
+      const phase1Tokens = result.usage
+        ? { input: result.usage.promptTokens, output: result.usage.completionTokens }
+        : { input: 0, output: 0 }
+      const combinedTokens = {
+        input: phase1Tokens.input + behaviorAnalysis.tokensUsed.input,
+        output: phase1Tokens.output + behaviorAnalysis.tokensUsed.output,
+        cached: 0,
+      }
+      tokensUsed = JSON.stringify(combinedTokens)
+      cost += behaviorAnalysis.cost
+    }
+  } catch {
+    /* behavior analysis is best-effort */
+  }
 
   db.prepare(
     `UPDATE inspections SET
@@ -146,7 +167,7 @@ ${bucketSummary}
     tokensUsed,
     cost,
     summary,
-    JSON.stringify({ newPatterns: patterns, bugs, tuning }),
+    JSON.stringify({ newPatterns: patterns, bugs, tuning, behaviorAnalysis }),
     inspectionId,
   )
 

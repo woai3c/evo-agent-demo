@@ -7,6 +7,7 @@ import { matchError } from '../evolution/pattern-matcher.js'
 
 export interface InsertOperationParams {
   operationId: string
+  conversationId?: string
   userId: string
   model: string
   provider: string
@@ -37,8 +38,8 @@ export interface InsertErrorParams {
 }
 
 const insertOperationStmt = db.prepare(`
-  INSERT INTO operations (operation_id, user_id, model, provider, status)
-  VALUES (?, ?, ?, ?, 'error')
+  INSERT INTO operations (operation_id, conversation_id, user_id, model, provider, status)
+  VALUES (?, ?, ?, ?, ?, 'error')
 `)
 
 const insertStepStmt = db.prepare(`
@@ -59,7 +60,13 @@ const updateOperationStmt = db.prepare(`
 
 export class TraceStore {
   insertOperation(params: InsertOperationParams): void {
-    insertOperationStmt.run(params.operationId, params.userId, params.model, params.provider)
+    insertOperationStmt.run(
+      params.operationId,
+      params.conversationId ?? null,
+      params.userId,
+      params.model,
+      params.provider,
+    )
   }
 
   insertStep(params: InsertStepParams): string {

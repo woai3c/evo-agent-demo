@@ -1,8 +1,18 @@
-import { Loader2, Play } from 'lucide-react'
+import { GitPullRequest, Loader2, Play, Wrench } from 'lucide-react'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-import { fetchInspections } from '../../lib/admin-api'
+import { fetchInspections, triggerAutoFix } from '../../lib/admin-api'
+
+interface AutoFixResultItem {
+  source: 'pattern' | 'behavior'
+  sourceId: string
+  sourceName: string
+  branch: string
+  prUrl: string | null
+  status: 'pr_created' | 'branch_created' | 'failed'
+  error?: string
+}
 
 interface InspectionRow {
   inspection_id: string
@@ -18,24 +28,68 @@ interface InspectionRow {
   details: { newPatterns: unknown[]; bugs: { title: string; severity: string; description: string }[] } | null
 }
 
+let activeFixPromise: Promise<{ results?: AutoFixResultItem[] }> | null = null
+let cachedFixResults: AutoFixResultItem[] | null = null
+
 export function AdminInspections() {
   const [inspections, setInspections] = useState<InspectionRow[]>([])
   const [running, setRunning] = useState(false)
+  const [fixing, setFixing] = useState(() => activeFixPromise !== null)
+  const [fixResults, setFixResults] = useState<AutoFixResultItem[] | null>(() => cachedFixResults)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const mountedRef = useRef(true)
 
   const load = () => fetchInspections().then((data) => setInspections(data.inspections))
 
   useEffect(() => {
+    mountedRef.current = true
     load()
+
+    if (activeFixPromise) {
+      activeFixPromise.then((data) => {
+        if (!mountedRef.current) return
+        const results = data.results ?? []
+        cachedFixResults = results
+        setFixResults(results)
+        setFixing(false)
+      })
+    }
+
+    return () => {
+      mountedRef.current = false
+    }
   }, [])
 
-  const triggerInspection = async () => {
+  const runInspection = async () => {
     setRunning(true)
     try {
       await fetch('/api/inspections/run', { method: 'POST' })
       await load()
     } finally {
       setRunning(false)
+    }
+  }
+
+  const runAutofix = async () => {
+    setFixing(true)
+    setFixResults(null)
+    cachedFixResults = null
+
+    const promise = triggerAutoFix()
+    activeFixPromise = promise
+
+    try {
+      const data = await promise
+      const results = data.results ?? []
+      cachedFixResults = results
+      if (mountedRef.current) {
+        setFixResults(results)
+      }
+    } finally {
+      activeFixPromise = null
+      if (mountedRef.current) {
+        setFixing(false)
+      }
     }
   }
 
@@ -52,15 +106,80 @@ export function AdminInspections() {
             </p>
           )}
         </div>
-        <button
-          onClick={triggerInspection}
-          disabled={running}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300"
-        >
-          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          {running ? '巡检中...' : '运行巡检'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={runInspection}
+            disabled={running || fixing}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300"
+          >
+            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            {running ? '巡检中...' : '巡检 A：识别 Pattern'}
+          </button>
+          <button
+            onClick={runAutofix}
+            disabled={running || fixing}
+            className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700 disabled:bg-gray-300"
+          >
+            {fixing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+            {fixing ? '修复中...' : '巡检 B：自动修复'}
+          </button>
+        </div>
       </div>
+
+      {fixResults && fixResults.length > 0 && (
+        <div className="border rounded-lg bg-white p-4 mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <GitPullRequest className="h-4 w-4" />
+            自动修复结果
+          </h3>
+          <div className="space-y-2">
+            {fixResults.map((r) => (
+              <div
+                key={r.sourceId}
+                className={`text-sm rounded px-3 py-2 ${
+                  r.status === 'failed'
+                    ? 'bg-red-50 text-red-800'
+                    : r.status === 'pr_created'
+                      ? 'bg-green-50 text-green-800'
+                      : 'bg-yellow-50 text-yellow-800'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] rounded px-1.5 py-0.5 ${r.source === 'pattern' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}
+                    >
+                      {r.source === 'pattern' ? 'Bug 修复' : '行为优化'}
+                    </span>
+                    <span className="font-medium">{r.sourceName}</span>
+                  </div>
+                  <span className="text-xs">
+                    {r.status === 'pr_created' ? '已创建 PR' : r.status === 'branch_created' ? '已创建分支' : '失败'}
+                  </span>
+                </div>
+                {r.prUrl && (
+                  <a
+                    href={r.prUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    {r.prUrl}
+                  </a>
+                )}
+                {r.status === 'branch_created' && <p className="text-xs mt-0.5">分支: {r.branch}</p>}
+                {r.error && <p className="text-xs mt-0.5">错误: {r.error}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fixResults && fixResults.length === 0 && (
+        <div className="border rounded-lg bg-gray-50 p-4 mb-6 text-sm text-gray-500">
+          没有待修复的 Harness 缺陷。请先运行巡检 A 识别问题。
+        </div>
+      )}
 
       {inspections.length === 0 ? (
         <p className="text-gray-400">暂未运行过巡检。点击上方按钮开始第一轮巡检。</p>

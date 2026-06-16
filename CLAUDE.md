@@ -22,7 +22,8 @@ pnpm format             # prettier --write
 pnpm format:check       # prettier --check
 pnpm db:seed            # seed Chinook demo data into SQLite
 pnpm simulate           # simulate multi-user traffic with injected errors
-pnpm inspect            # trigger one inspection round (run simulate first)
+pnpm inspect            # Inspection A: recognize error patterns (run simulate first)
+pnpm autofix            # Inspection B: auto-fix harness bugs via PR generation
 ```
 
 Single-package commands use `pnpm --filter`:
@@ -54,8 +55,10 @@ The server has four subsystems that form a pipeline:
 4. **Evolution** (`evolution/`) — The self-evolving pipeline:
    - `error-bucketer.ts` — groups errors by provider × errorType × statusCode × toolName
    - `pattern-matcher.ts` — checks errors against the pattern registry
-   - `inspector.ts` — LLM-driven agent that analyzes unmatched errors, classifies them (`user_error` / `provider_error` / `harness_bug`), generates new patterns
+   - `inspector.ts` — LLM-driven agent that analyzes unmatched errors, classifies them (`user_error` / `provider_error` / `harness_bug`), generates new patterns. Also runs behavior analysis (Phase 2).
    - `auto-fix.ts` — applies fixes: user/provider errors → new pattern + backfill; harness bugs → bug report awaiting human confirmation
+   - `auto-pr.ts` — Inspection B: for each unfixed `harness_bug` pattern, LLM locates files → generates code fix → creates git branch/commit/push → opens PR via `gh`. Updates `fix_status`/`fix_pr_url` on the pattern.
+   - `behavior-analyzer.ts` — Phase 2a (LLM semantic clustering of operations into behaviors) → Phase 2b (5 deterministic health evaluators) → Phase 2c (LLM suggestions for unhealthy behaviors)
    - `context-tuner.ts` — adjusts compression thresholds from trace data (L4 agent-autonomous embryo)
 
 5. **Context management** (`context/`) — `compression.ts` reduces message history near window limits. `truncation.ts` applies per-tool head/tail byte budgets.
@@ -67,19 +70,20 @@ All mounted under `/api/` in `app.ts`:
 - `POST /api/chat/message` — accepts user message, runs agent loop, streams SSE
 - `GET /api/chat/conversations` — list conversations
 - `/api/traces`, `/api/patterns`, `/api/inspections`, `/api/dashboard` — admin data
+- `POST /api/inspections/autofix` — trigger Inspection B (auto-fix PRs for harness bugs)
 
 ### Web routes (`packages/web/src/`)
 
 - `/` — Chat page (conversation sidebar + message area)
 - `/admin` — Dashboard overview (stats cards + nav to sub-pages)
-- `/admin/traces`, `/admin/errors`, `/admin/patterns`, `/admin/inspections`, `/admin/trends`
+- `/admin/traces`, `/admin/errors`, `/admin/patterns`, `/admin/inspections`, `/admin/behaviors`, `/admin/trends`
 
 ### Database
 
 SQLite via `better-sqlite3` with WAL mode. Schema in `db/schema.ts`. Three table groups:
 
 - **Trace**: `operations`, `steps`, `errors`
-- **Evolution**: `patterns`, `inspections`
+- **Evolution**: `patterns` (with `fix_status`/`fix_pr_url` for harness bugs), `inspections`, `behaviors`
 - **App**: `users`, `conversations`, `sent_emails`
 - **Demo data**: Chinook dataset (artists, albums, tracks, etc.) loaded by `pnpm db:seed`
 
@@ -95,7 +99,7 @@ Server → Web uses SSE with typed `StreamEvent` union: `text-delta`, `tool-call
 
 - **Harness**: The system wrapping the LLM (agent loop + tools + context + error recovery). Evo is the vehicle; the Self-Evolving Harness is the protagonist.
 - **Tracing as first-class citizen**: `run step = trace event`. If a step has no trace, it's a code bug.
-- **Self-Evolving**: Error patterns are automatically detected from aggregated traces, classified (user_error / provider_error / harness_bug), and fixed through an inspection agent.
+- **Self-Evolving**: Two-stage inspection pipeline. Inspection A detects error patterns from traces and classifies them (`user_error` / `provider_error` / `harness_bug`). Inspection B auto-generates fix PRs for unfixed harness bugs (commit → push → open PR). Behavior analysis clusters operations semantically and evaluates health.
 
 ## Conventions
 

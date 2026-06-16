@@ -42,7 +42,7 @@ interface AgentLoopParams {
 export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<StreamEvent> {
   const { userId, conversationId, userMessage, provider, model: modelId } = params
 
-  const tracer = new Tracer({ userId, provider, model: modelId })
+  const tracer = new Tracer({ userId, conversationId, provider, model: modelId })
 
   const row = db.prepare('SELECT messages FROM conversations WHERE conversation_id = ?').get(conversationId) as
     | { messages: string }
@@ -80,7 +80,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
 
         case 'tool-call':
           tracer.onToolCallStart()
-          pendingToolArgs = part.args as Record<string, unknown>
+          pendingToolArgs = (part.args as Record<string, unknown>) || {}
           yield {
             type: 'tool-call',
             toolName: part.toolName as ToolName,
@@ -89,11 +89,20 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           break
 
         case 'tool-result': {
-          const resultStr = JSON.stringify(part.result)
+          const resultObj = (part.result as Record<string, unknown> | undefined) ?? {}
+          const resultStr = JSON.stringify(resultObj)
           const outputSize = resultStr.length
-          const resultObj = part.result as Record<string, unknown> | undefined
-          const errorMsg = resultObj && typeof resultObj.error === 'string' ? resultObj.error : undefined
+          const errorMsg = typeof resultObj.error === 'string' ? resultObj.error : undefined
           const success = !errorMsg
+          // Rate limit check for search tools
+          if (
+            !success &&
+            (part.toolName === 'webSearch' || part.toolName === 'webFetch') &&
+            errorMsg &&
+            /rate limit/i.test(errorMsg)
+          ) {
+            throw new Error(`Search API rate limited: ${errorMsg}`)
+          }
           tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize, errorMsg)
           yield {
             type: 'tool-result',
@@ -106,7 +115,9 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
 
         case 'step-finish':
           if (part.usage) {
-            const totalUsed = part.usage.promptTokens + part.usage.completionTokens
+            const promptTokens = part.usage.promptTokens ?? 0
+            const completionTokens = part.usage.completionTokens ?? 0
+            const totalUsed = promptTokens + completionTokens
             const maxWindow = 128_000
             tracer.onStepFinish(
               {
