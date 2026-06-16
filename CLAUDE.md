@@ -93,6 +93,13 @@ SQLite via `better-sqlite3` with WAL mode. Schema in `db/schema.ts`. Three table
 
 Vercel AI SDK with three providers configured in `providers/registry.ts`: DeepSeek (default), OpenAI, Anthropic. Provider/model names defined as const tuples in `shared/constants.ts`.
 
+### Environment variables
+
+- **API keys**: `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TAVILY_API_KEY`
+- **Chat model**: hardcoded in `shared/constants.ts` (`DEFAULT_PROVIDER = 'deepseek'`, `DEFAULT_MODEL = 'deepseek-v4-flash'`)
+- **Inspection/auto-fix model**: `INSPECTOR_PROVIDER` → `DEFAULT_PROVIDER` → `'deepseek'`; `INSPECTOR_MODEL` → `DEFAULT_MODEL` → `'deepseek-v4-flash'` (priority chain, first non-empty wins)
+- **Server**: `PORT` (default 3000), `DB_PATH` (default `./data/evo.db`)
+
 ### Communication protocol
 
 Server → Web uses SSE with typed `StreamEvent` union: `text-delta`, `tool-call`, `tool-result`, `error`, `done`.

@@ -71,9 +71,29 @@ pnpm typecheck          # 全量类型检查
 pnpm lint               # ESLint 检查 + 自动修复
 pnpm format             # Prettier 格式化
 pnpm db:seed            # 填充 Chinook 演示数据
-pnpm simulate           # 模拟多用户流量（含注入错误）
-pnpm inspect            # 触发一轮巡检
+pnpm simulate           # 发送真实对话到 server（需先启动 dev:server，调用 LLM API）
+pnpm simulate 20        # 发送 20 轮对话（默认 10）
+pnpm simulate --mock    # 插入 mock trace 数据（不调用 API，默认 100 条）
+pnpm inspect            # 巡检 A：错误模式识别 + 行为分析
+pnpm autofix            # 巡检 B：自动修复（为 harness bug 生成 PR）
 ```
+
+## 环境变量
+
+| 变量                 | 必填       | 默认值              | 说明                                               |
+| -------------------- | ---------- | ------------------- | -------------------------------------------------- |
+| `DEEPSEEK_API_KEY`   | 至少填一个 | —                   | DeepSeek API Key                                   |
+| `OPENAI_API_KEY`     | —          | —                   | OpenAI API Key                                     |
+| `ANTHROPIC_API_KEY`  | —          | —                   | Anthropic API Key                                  |
+| `TAVILY_API_KEY`     | —          | —                   | Tavily Web Search API Key                          |
+| `DEFAULT_PROVIDER`   | —          | `deepseek`          | 巡检/自动修复的兜底供应商                          |
+| `DEFAULT_MODEL`      | —          | `deepseek-v4-flash` | 巡检/自动修复的兜底模型                            |
+| `INSPECTOR_PROVIDER` | —          | —                   | 巡检/自动修复专用供应商（优先于 DEFAULT_PROVIDER） |
+| `INSPECTOR_MODEL`    | —          | —                   | 巡检/自动修复专用模型（优先于 DEFAULT_MODEL）      |
+| `PORT`               | —          | `3000`              | 服务端端口                                         |
+| `DB_PATH`            | —          | `./data/evo.db`     | SQLite 数据库路径                                  |
+
+对话默认使用 DeepSeek（硬编码在 `packages/shared/src/constants.ts`）。巡检和自动修复的模型优先级：`INSPECTOR_*` → `DEFAULT_*` → 硬编码兜底值。
 
 ## 核心概念
 
