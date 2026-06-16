@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "db:seed": "tsx scripts/seed-demo-data.ts",

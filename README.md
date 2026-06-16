@@ -63,10 +63,11 @@ packages/
 ## 可用命令
 
 ```bash
-pnpm dev                # 同时启动 server + web（开发模式）
+pnpm dev                # 同时启动 server + web（开发模式，tsx watch）
 pnpm dev:server         # 仅启动 server（tsx watch 自动重载）
 pnpm dev:web            # 仅启动 web（Vite HMR）
 pnpm build              # 构建所有包
+pnpm start              # 生产模式启动 server（需先 build）
 pnpm typecheck          # 全量类型检查
 pnpm lint               # ESLint 检查 + 自动修复
 pnpm format             # Prettier 格式化
@@ -75,8 +76,10 @@ pnpm simulate           # 发送真实对话到 server（需先启动 dev:server
 pnpm simulate 20        # 发送 20 轮对话（默认 10）
 pnpm simulate --mock    # 插入 mock trace 数据（不调用 API，默认 100 条）
 pnpm inspect            # 巡检 A：错误模式识别 + 行为分析
-pnpm autofix            # 巡检 B：自动修复（为 harness bug 生成 PR）
+pnpm autofix            # 巡检 B：自动修复（为 harness bug 生成 PR，不可在 dev 模式使用）
 ```
+
+> **注意**：`pnpm autofix` 会修改源码文件并提交 git，不能在 `pnpm dev`（tsx watch）下通过 Web 面板触发，否则文件变更会导致 server 重启中断修复流程。请使用 `pnpm autofix` CLI 命令，或用 `pnpm build && pnpm start` 启动生产模式后再通过面板触发。
 
 ## 环境变量
 

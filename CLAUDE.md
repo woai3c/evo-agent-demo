@@ -16,6 +16,7 @@ pnpm dev                # start server (3000) + web (5173) in parallel
 pnpm dev:server         # server only (tsx watch, auto-reloads)
 pnpm dev:web            # web only (vite)
 pnpm build              # build all packages
+pnpm start              # production server (requires build first, no tsx watch)
 pnpm typecheck          # tsc --noEmit across all packages
 pnpm lint               # eslint --fix
 pnpm format             # prettier --write

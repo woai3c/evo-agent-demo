@@ -8,6 +8,7 @@
     "dev": "pnpm --parallel -r run dev",
     "dev:server": "pnpm --filter @evo/server run dev",
     "dev:web": "pnpm --filter @evo/web run dev",
+    "start": "pnpm --filter @evo/server run start",
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
     "lint": "eslint . --fix",
