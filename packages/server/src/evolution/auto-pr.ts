@@ -155,6 +155,15 @@ const PROJECT_STRUCTURE = `## Project structure:
 - packages/server/src/api/ — Hono API routes
 - packages/web/src/ — React frontend`
 
+function withHeartbeat<T>(promise: Promise<T>, log: ProgressCallback, prefix: string, intervalMs = 15_000): Promise<T> {
+  const start = Date.now()
+  const timer = setInterval(() => {
+    const elapsed = Math.round((Date.now() - start) / 1000)
+    log(`${prefix} 仍在等待 LLM 响应...（${elapsed}s）`)
+  }, intervalMs)
+  return promise.finally(() => clearInterval(timer))
+}
+
 export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFixResult[]> {
   const log = onProgress ?? (() => {})
 
@@ -196,18 +205,22 @@ export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFix
     try {
       // Step 1: Ask LLM which files to read
       log(`${tag} LLM 定位相关源码文件...`)
-      const locatorResult = await generateObject({
-        model,
-        schema: FileLocatorSchema,
-        prompt: `You are improving an AI Agent demo project (TypeScript, Hono server, React frontend).
+      const locatorResult = await withHeartbeat(
+        generateObject({
+          model,
+          schema: FileLocatorSchema,
+          prompt: `You are improving an AI Agent demo project (TypeScript, Hono server, React frontend).
 
 ${PROJECT_STRUCTURE}
 
 ${target.locatorPromptExtra}
 
 Which source files need to be modified? List 1-5 files.`,
-        abortSignal: AbortSignal.timeout(300_000),
-      })
+          abortSignal: AbortSignal.timeout(300_000),
+        }),
+        log,
+        tag,
+      )
 
       const filePaths = locatorResult.object.files.map((f) => f.path)
       const fileContents: { path: string; content: string }[] = []
@@ -239,13 +252,15 @@ Which source files need to be modified? List 1-5 files.`,
       }
 
       // Step 2: Ask LLM to generate code changes
-      log(`${tag} LLM 生成代码修改方案...`)
       const fileContext = fileContents.map((f) => `### ${f.path}\n\`\`\`typescript\n${f.content}\n\`\`\``).join('\n\n')
+      const contextChars = fileContext.length
+      log(`${tag} LLM 生成代码修改方案...（上下文约 ${Math.round(contextChars / 1000)}k 字符）`)
 
-      const fixResult = await generateObject({
-        model,
-        schema: CodeFixSchema,
-        prompt: `You are improving an AI Agent demo project. Generate precise code changes.
+      const fixResult = await withHeartbeat(
+        generateObject({
+          model,
+          schema: CodeFixSchema,
+          prompt: `You are improving an AI Agent demo project. Generate precise code changes.
 
 ${target.fixPromptExtra}
 
@@ -258,8 +273,11 @@ ${fileContext}
 2. Make minimal, focused changes — fix only the issue described, don't refactor unrelated code.
 3. Write commit message in conventional commits format.
 4. Write PR title and body in English.`,
-        abortSignal: AbortSignal.timeout(300_000),
-      })
+          abortSignal: AbortSignal.timeout(300_000),
+        }),
+        log,
+        tag,
+      )
 
       log(`${tag} LLM 生成 ${fixResult.object.changes.length} 个代码变更`)
 
