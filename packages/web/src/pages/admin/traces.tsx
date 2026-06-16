@@ -24,6 +24,7 @@ interface OperationRow {
   cost: number
   error_summary: string | null
   created_at: string
+  conversation_title: string | null
 }
 
 interface StepRow {
@@ -150,7 +151,7 @@ export function AdminTraces() {
             <thead className="bg-gray-50 text-gray-500">
               <tr>
                 <th className="px-4 py-2 text-left w-8"></th>
-                <th className="px-4 py-2 text-left">Operation</th>
+                <th className="px-4 py-2 text-left">对话</th>
                 <th className="px-4 py-2 text-left">用户</th>
                 <th className="px-4 py-2 text-left">模型</th>
                 <th className="px-4 py-2 text-left">状态</th>
@@ -176,7 +177,9 @@ export function AdminTraces() {
                         <ChevronRight className="h-4 w-4 text-gray-400" />
                       )}
                     </td>
-                    <td className="px-4 py-2 font-mono text-xs">{op.operation_id.slice(0, 16)}...</td>
+                    <td className="px-4 py-2 text-xs max-w-[200px] truncate" title={op.operation_id}>
+                      {op.conversation_title || op.operation_id.slice(0, 16) + '...'}
+                    </td>
                     <td className="px-4 py-2">{op.user_id}</td>
                     <td className="px-4 py-2 text-xs">{op.model}</td>
                     <td className="px-4 py-2">
@@ -186,8 +189,16 @@ export function AdminTraces() {
                     </td>
                     <td className="px-4 py-2 text-right">{op.total_steps}</td>
                     <td className="px-4 py-2 text-right">{(op.total_duration / 1000).toFixed(1)}s</td>
-                    <td className="px-4 py-2 text-right">
+                    <td
+                      className="px-4 py-2 text-right"
+                      title={`输入: ${op.total_tokens.input} | 输出: ${op.total_tokens.output} | 缓存: ${op.total_tokens.cached ?? 0}`}
+                    >
                       {((op.total_tokens.input + op.total_tokens.output) / 1000).toFixed(1)}k
+                      {(op.total_tokens.cached ?? 0) > 0 && op.total_tokens.input > 0 && (
+                        <span className="ml-1 text-[10px] text-green-600">
+                          {Math.round(((op.total_tokens.cached ?? 0) / op.total_tokens.input) * 100)}%
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-right">¥{op.cost.toFixed(4)}</td>
                     <td className="px-4 py-2 text-xs text-gray-400">{formatLocalTime(op.created_at)}</td>

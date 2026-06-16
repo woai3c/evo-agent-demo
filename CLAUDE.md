@@ -21,7 +21,9 @@ pnpm lint               # eslint --fix
 pnpm format             # prettier --write
 pnpm format:check       # prettier --check
 pnpm db:seed            # seed Chinook demo data into SQLite
-pnpm simulate           # simulate multi-user traffic with injected errors
+pnpm simulate           # send real conversations to server (requires dev:server running, calls LLM API)
+pnpm simulate 20        # send 20 conversations (default: 10)
+pnpm simulate --mock    # insert mock trace data without API calls (default: 100)
 pnpm inspect            # Inspection A: recognize error patterns (run simulate first)
 pnpm autofix            # Inspection B: auto-fix harness bugs via PR generation
 ```

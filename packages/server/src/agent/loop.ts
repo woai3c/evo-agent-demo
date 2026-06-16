@@ -119,10 +119,22 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
             const completionTokens = part.usage.completionTokens ?? 0
             const totalUsed = promptTokens + completionTokens
             const maxWindow = 128_000
+
+            const meta = part.providerMetadata
+            let cachedTokens = 0
+            if (meta?.deepseek) {
+              cachedTokens = (meta.deepseek.promptCacheHitTokens as number) ?? 0
+            } else if (meta?.anthropic) {
+              cachedTokens = (meta.anthropic.cacheReadInputTokens as number) ?? 0
+            } else if (meta?.openai) {
+              cachedTokens = (meta.openai.cachedPromptTokens as number) ?? 0
+            }
+
             tracer.onStepFinish(
               {
                 promptTokens: part.usage.promptTokens,
                 completionTokens: part.usage.completionTokens,
+                cachedTokens,
               },
               {
                 totalTokens: totalUsed,

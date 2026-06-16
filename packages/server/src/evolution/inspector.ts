@@ -44,35 +44,52 @@ const PatternSuggestionSchema = z.object({
   summary: z.string().describe('Brief summary of this inspection round'),
 })
 
-export async function runInspection(): Promise<string> {
+export type ProgressCallback = (message: string) => void
+
+export async function runInspection(onProgress?: ProgressCallback): Promise<string> {
+  const log = onProgress ?? (() => {})
   const inspectionId = `insp_${nanoid()}`
   const round =
     ((db.prepare('SELECT MAX(round) as max FROM inspections').get() as { max: number | null })?.max ?? 0) + 1
+
+  log(`开始巡检 A 第 ${round} 轮...`)
 
   db.prepare('INSERT INTO inspections (inspection_id, round, traces_analyzed) VALUES (?, ?, 0)').run(
     inspectionId,
     round,
   )
 
+  let totalTraces = 0
+  let newPatterns = 0
+  let harnessBugs = 0
+  let summary = ''
+  let patterns: z.infer<typeof PatternSuggestionSchema>['patterns'] = []
+  let bugs: z.infer<typeof PatternSuggestionSchema>['bugs'] = []
+  let tokensUsed = '{}'
+  let cost = 0
+  let tuning = null
+
+  // Phase 1: error pattern recognition (only if unmatched errors exist)
   const unmatchedBuckets = bucketErrors({ unmatched: true })
 
   if (unmatchedBuckets.length === 0) {
-    db.prepare(
-      "UPDATE inspections SET finished_at = datetime('now'), summary = ?, details = '{}' WHERE inspection_id = ?",
-    ).run('No unmatched errors found. All errors are covered by existing patterns.', inspectionId)
-    return inspectionId
-  }
-
-  const totalTraces = unmatchedBuckets.reduce((sum, b) => sum + b.count, 0)
-  const bucketSummary = unmatchedBuckets
-    .slice(0, 30)
-    .map(
-      (b) =>
-        `- [${b.count}x] provider=${b.provider} type=${b.errorType} status=${b.statusCode ?? 'N/A'} tool=${b.toolName ?? 'N/A'}\n  message: "${b.message}"`,
+    log('Phase 1: 没有未匹配的错误，跳过错误模式识别')
+    summary = 'No unmatched errors. Ran behavior analysis only.'
+  } else {
+    log(
+      `发现 ${unmatchedBuckets.length} 个未匹配的错误桶（共 ${unmatchedBuckets.reduce((s, b) => s + b.count, 0)} 条错误）`,
     )
-    .join('\n')
 
-  const prompt = `You are an AI Agent Harness inspector. Analyze these unmatched error buckets from agent operations and generate error patterns.
+    totalTraces = unmatchedBuckets.reduce((sum, b) => sum + b.count, 0)
+    const bucketSummary = unmatchedBuckets
+      .slice(0, 30)
+      .map(
+        (b) =>
+          `- [${b.count}x] provider=${b.provider} type=${b.errorType} status=${b.statusCode ?? 'N/A'} tool=${b.toolName ?? 'N/A'}\n  message: "${b.message}"`,
+      )
+      .join('\n')
+
+    const prompt = `You are an AI Agent Harness inspector. Analyze these unmatched error buckets from agent operations and generate error patterns.
 
 ## Unmatched Error Buckets (${unmatchedBuckets.length} buckets, ${totalTraces} total errors):
 
@@ -92,61 +109,70 @@ ${bucketSummary}
 
 4. Write user_message in Chinese (this is a Chinese-facing product).`
 
-  const provider = (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as ProviderName
-  const modelId = process.env.INSPECTOR_MODEL ?? process.env.DEFAULT_MODEL ?? 'deepseek-v4-flash'
+    const provider = (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as ProviderName
+    const modelId = process.env.INSPECTOR_MODEL ?? process.env.DEFAULT_MODEL ?? 'deepseek-v4-flash'
 
-  let result
-  try {
-    const model = getModel(provider, modelId)
+    log(`Phase 1: LLM 分析错误模式（provider: ${provider}, model: ${modelId}）...`)
 
-    result = await generateObject({
-      model,
-      schema: PatternSuggestionSchema,
-      prompt,
-    })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    db.prepare("UPDATE inspections SET finished_at = datetime('now'), summary = ? WHERE inspection_id = ?").run(
-      `Inspection failed: ${message}`,
-      inspectionId,
-    )
-    return inspectionId
+    try {
+      const model = getModel(provider, modelId)
+
+      const result = await generateObject({
+        model,
+        schema: PatternSuggestionSchema,
+        prompt,
+      })
+
+      patterns = result.object.patterns
+      bugs = result.object.bugs
+      summary = result.object.summary
+      harnessBugs = bugs.length
+      log(`Phase 1 完成: 识别到 ${patterns.length} 个 Pattern，${bugs.length} 个 Harness 缺陷`)
+
+      const fixResult = applyFixes(patterns, inspectionId, round)
+      newPatterns = fixResult.newPatterns
+      log(`已写入 ${fixResult.newPatterns} 个新 Pattern，回扫标记 ${fixResult.backfilled} 条错误`)
+
+      if (result.usage) {
+        tokensUsed = JSON.stringify({
+          input: result.usage.promptTokens,
+          output: result.usage.completionTokens,
+          cached: 0,
+        })
+        cost = estimateCost(
+          { input: result.usage.promptTokens, output: result.usage.completionTokens, cached: 0 },
+          provider,
+          modelId,
+        )
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      log(`✗ Phase 1 LLM 分析失败: ${message}`)
+      summary = `Phase 1 failed: ${message}`
+    }
+
+    tuning = tuneContextStrategy()
+    log('上下文策略自调优完成')
   }
 
-  const { patterns, bugs, summary } = result.object
-  const fixResult = applyFixes(patterns, inspectionId, round)
-
-  let tokensUsed = JSON.stringify(
-    result.usage ? { input: result.usage.promptTokens, output: result.usage.completionTokens, cached: 0 } : {},
-  )
-  let cost = result.usage
-    ? estimateCost(
-        { input: result.usage.promptTokens, output: result.usage.completionTokens, cached: 0 },
-        provider,
-        modelId,
-      )
-    : 0
-
-  const tuning = tuneContextStrategy()
-
-  // Phase 2: behavior clustering + health evaluation
+  // Phase 2: behavior clustering + health evaluation (always runs)
+  log('Phase 2: 行为聚类分析...')
   let behaviorAnalysis = null
   try {
     behaviorAnalysis = await analyzeBehaviors()
+    log(`Phase 2 完成: ${behaviorAnalysis.behaviorsFound} 个行为模式，${behaviorAnalysis.unhealthyCount} 个不健康`)
     if (behaviorAnalysis.tokensUsed.input > 0) {
-      const phase1Tokens = result.usage
-        ? { input: result.usage.promptTokens, output: result.usage.completionTokens }
-        : { input: 0, output: 0 }
+      const prev = tokensUsed !== '{}' ? JSON.parse(tokensUsed) : { input: 0, output: 0, cached: 0 }
       const combinedTokens = {
-        input: phase1Tokens.input + behaviorAnalysis.tokensUsed.input,
-        output: phase1Tokens.output + behaviorAnalysis.tokensUsed.output,
-        cached: 0,
+        input: prev.input + behaviorAnalysis.tokensUsed.input,
+        output: prev.output + behaviorAnalysis.tokensUsed.output,
+        cached: prev.cached ?? 0,
       }
       tokensUsed = JSON.stringify(combinedTokens)
       cost += behaviorAnalysis.cost
     }
-  } catch {
-    /* behavior analysis is best-effort */
+  } catch (e) {
+    log(`Phase 2 失败（非关键）: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   db.prepare(
@@ -162,8 +188,8 @@ ${bucketSummary}
     WHERE inspection_id = ?`,
   ).run(
     totalTraces,
-    fixResult.newPatterns,
-    bugs.length,
+    newPatterns,
+    harnessBugs,
     tokensUsed,
     cost,
     summary,
@@ -171,5 +197,6 @@ ${bucketSummary}
     inspectionId,
   )
 
+  log(`巡检完成（¥${cost.toFixed(4)}）: ${summary}`)
   return inspectionId
 }

@@ -54,9 +54,58 @@ export async function fetchInspections() {
   return res.json()
 }
 
-export async function triggerAutoFix() {
-  const res = await fetch(`${BASE}/inspections/autofix`, { method: 'POST' })
-  return res.json()
+export interface SSECallbacks {
+  onLog?: (message: string) => void
+  onDone?: (data: unknown) => void
+  onError?: (error: string) => void
+}
+
+async function consumeSSE(url: string, callbacks: SSECallbacks): Promise<unknown> {
+  const res = await fetch(url, { method: 'POST' })
+  if (!res.body) throw new Error('No response body')
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: unknown = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    let currentEvent = ''
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent = line.slice(7).trim()
+      } else if (line.startsWith('data: ')) {
+        const data = line.slice(6)
+        if (currentEvent === 'log') {
+          callbacks.onLog?.(data)
+        } else if (currentEvent === 'done') {
+          result = JSON.parse(data)
+          callbacks.onDone?.(result)
+        } else if (currentEvent === 'error') {
+          const parsed = JSON.parse(data)
+          callbacks.onError?.(parsed.error ?? data)
+        }
+        currentEvent = ''
+      }
+    }
+  }
+
+  return result
+}
+
+export async function triggerInspection(callbacks: SSECallbacks = {}) {
+  return consumeSSE(`${BASE}/inspections/run`, callbacks)
+}
+
+export async function triggerAutoFix(callbacks: SSECallbacks = {}) {
+  return consumeSSE(`${BASE}/inspections/autofix`, callbacks)
 }
 
 export async function createPattern(body: {

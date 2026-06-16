@@ -40,12 +40,19 @@ tracesRoutes.get('/', async (c) => {
 
   const operations = db
     .prepare(
-      `SELECT operation_id, user_id, model, provider, status, total_steps, total_duration, total_tokens, cost, error_summary, created_at
-       FROM operations ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT o.operation_id, o.user_id, o.model, o.provider, o.status, o.total_steps, o.total_duration, o.total_tokens, o.cost, o.error_summary, o.created_at,
+              c.title as conversation_title
+       FROM operations o
+       LEFT JOIN conversations c ON o.conversation_id = c.conversation_id
+       ${where.replace(/\b(status|provider|user_id|created_at)\b/g, 'o.$1')} ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,
     )
     .all(...params, limit, offset) as Record<string, unknown>[]
 
-  const total = db.prepare(`SELECT COUNT(*) as count FROM operations ${where}`).get(...params) as { count: number }
+  const total = db
+    .prepare(
+      `SELECT COUNT(*) as count FROM operations o ${where.replace(/\b(status|provider|user_id|created_at)\b/g, 'o.$1')}`,
+    )
+    .get(...params) as { count: number }
 
   return c.json({
     operations: operations.map((op) => ({

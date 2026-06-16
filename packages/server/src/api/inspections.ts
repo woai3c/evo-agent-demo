@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
 
 import { db } from '../db/index.js'
 import { runAutoFix } from '../evolution/auto-pr.js'
@@ -19,22 +20,30 @@ inspectionsRoutes.get('/', async (c) => {
 })
 
 inspectionsRoutes.post('/run', async (c) => {
-  try {
-    const inspectionId = await runInspection()
-    const inspection = db.prepare('SELECT * FROM inspections WHERE inspection_id = ?').get(inspectionId)
-    return c.json({ inspectionId, inspection })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    return c.json({ error: `Inspection failed: ${message}` }, 500)
-  }
+  return streamSSE(c, async (stream) => {
+    try {
+      const inspectionId = await runInspection((msg) => {
+        stream.writeSSE({ event: 'log', data: msg })
+      })
+      const inspection = db.prepare('SELECT * FROM inspections WHERE inspection_id = ?').get(inspectionId)
+      await stream.writeSSE({ event: 'done', data: JSON.stringify({ inspectionId, inspection }) })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: `Inspection failed: ${message}` }) })
+    }
+  })
 })
 
 inspectionsRoutes.post('/autofix', async (c) => {
-  try {
-    const results = await runAutoFix()
-    return c.json({ results })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    return c.json({ error: `Auto-fix failed: ${message}` }, 500)
-  }
+  return streamSSE(c, async (stream) => {
+    try {
+      const results = await runAutoFix((msg) => {
+        stream.writeSSE({ event: 'log', data: msg })
+      })
+      await stream.writeSSE({ event: 'done', data: JSON.stringify({ results }) })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: `Auto-fix failed: ${message}` }) })
+    }
+  })
 })

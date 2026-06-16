@@ -1,8 +1,8 @@
-import { GitPullRequest, Loader2, Play, Wrench } from 'lucide-react'
+import { GitPullRequest, Loader2, Play, ScrollText, Wrench } from 'lucide-react'
 
 import { useEffect, useRef, useState } from 'react'
 
-import { fetchInspections, triggerAutoFix } from '../../lib/admin-api'
+import { fetchInspections, triggerAutoFix, triggerInspection } from '../../lib/admin-api'
 
 interface AutoFixResultItem {
   source: 'pattern' | 'behavior'
@@ -28,30 +28,67 @@ interface InspectionRow {
   details: { newPatterns: unknown[]; bugs: { title: string; severity: string; description: string }[] } | null
 }
 
-let activeFixPromise: Promise<{ results?: AutoFixResultItem[] }> | null = null
+// Module-level state survives component remount
+let activePromise: Promise<unknown> | null = null
+let activeType: 'inspect' | 'autofix' | null = null
+let cachedLogs: string[] = []
 let cachedFixResults: AutoFixResultItem[] | null = null
+
+function LogPanel({ logs, title }: { logs: string[]; title: string }) {
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logs.length])
+
+  if (logs.length === 0) return null
+
+  return (
+    <div className="border rounded-lg bg-gray-900 text-gray-100 mb-6 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
+        <ScrollText className="h-4 w-4 text-gray-400" />
+        <span className="text-xs font-medium text-gray-300">{title}</span>
+        <span className="text-[10px] text-gray-500 ml-auto">{logs.length} 条日志</span>
+      </div>
+      <div className="max-h-64 overflow-y-auto p-3 font-mono text-xs leading-relaxed space-y-0.5">
+        {logs.map((log, i) => (
+          <div key={i} className={log.includes('✗') ? 'text-red-400' : log.includes('✓') ? 'text-green-400' : ''}>
+            <span className="text-gray-500 select-none mr-2">{String(i + 1).padStart(3, ' ')}</span>
+            {log}
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  )
+}
 
 export function AdminInspections() {
   const [inspections, setInspections] = useState<InspectionRow[]>([])
-  const [running, setRunning] = useState(false)
-  const [fixing, setFixing] = useState(() => activeFixPromise !== null)
+  const [running, setRunning] = useState(() => activeType === 'inspect')
+  const [fixing, setFixing] = useState(() => activeType === 'autofix')
+  const [logs, setLogs] = useState<string[]>(() => [...cachedLogs])
   const [fixResults, setFixResults] = useState<AutoFixResultItem[] | null>(() => cachedFixResults)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const mountedRef = useRef(true)
 
   const load = () => fetchInspections().then((data) => setInspections(data.inspections))
 
+  const appendLog = (msg: string) => {
+    cachedLogs.push(msg)
+    setLogs((prev) => [...prev, msg])
+  }
+
   useEffect(() => {
     mountedRef.current = true
     load()
 
-    if (activeFixPromise) {
-      activeFixPromise.then((data) => {
+    if (activePromise) {
+      activePromise.then(() => {
         if (!mountedRef.current) return
-        const results = data.results ?? []
-        cachedFixResults = results
-        setFixResults(results)
+        setRunning(false)
         setFixing(false)
+        load()
       })
     }
 
@@ -62,38 +99,62 @@ export function AdminInspections() {
 
   const runInspection = async () => {
     setRunning(true)
+    setLogs([])
+    setFixResults(null)
+    cachedLogs = []
+    cachedFixResults = null
+    activeType = 'inspect'
+
+    const promise = triggerInspection({
+      onLog: (msg) => {
+        if (mountedRef.current) appendLog(msg)
+        else cachedLogs.push(msg)
+      },
+    })
+    activePromise = promise
+
     try {
-      await fetch('/api/inspections/run', { method: 'POST' })
-      await load()
+      await promise
+      if (mountedRef.current) await load()
     } finally {
-      setRunning(false)
+      activePromise = null
+      activeType = null
+      if (mountedRef.current) setRunning(false)
     }
   }
 
   const runAutofix = async () => {
     setFixing(true)
+    setLogs([])
     setFixResults(null)
+    cachedLogs = []
     cachedFixResults = null
+    activeType = 'autofix'
 
-    const promise = triggerAutoFix()
-    activeFixPromise = promise
+    const promise = triggerAutoFix({
+      onLog: (msg) => {
+        if (mountedRef.current) appendLog(msg)
+        else cachedLogs.push(msg)
+      },
+      onDone: (data) => {
+        const results = (data as { results?: AutoFixResultItem[] }).results ?? []
+        cachedFixResults = results
+        if (mountedRef.current) setFixResults(results)
+      },
+    })
+    activePromise = promise
 
     try {
-      const data = await promise
-      const results = data.results ?? []
-      cachedFixResults = results
-      if (mountedRef.current) {
-        setFixResults(results)
-      }
+      await promise
     } finally {
-      activeFixPromise = null
-      if (mountedRef.current) {
-        setFixing(false)
-      }
+      activePromise = null
+      activeType = null
+      if (mountedRef.current) setFixing(false)
     }
   }
 
   const totalCost = inspections.reduce((sum, i) => sum + i.cost, 0)
+  const busy = running || fixing
 
   return (
     <div className="p-6">
@@ -109,7 +170,7 @@ export function AdminInspections() {
         <div className="flex gap-2">
           <button
             onClick={runInspection}
-            disabled={running || fixing}
+            disabled={busy}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300"
           >
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
@@ -117,7 +178,7 @@ export function AdminInspections() {
           </button>
           <button
             onClick={runAutofix}
-            disabled={running || fixing}
+            disabled={busy}
             className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700 disabled:bg-gray-300"
           >
             {fixing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
@@ -126,6 +187,10 @@ export function AdminInspections() {
         </div>
       </div>
 
+      {/* Real-time log panel */}
+      <LogPanel logs={logs} title={running ? '巡检 A 执行日志' : fixing ? '巡检 B 自动修复日志' : '执行日志'} />
+
+      {/* Fix results */}
       {fixResults && fixResults.length > 0 && (
         <div className="border rounded-lg bg-white p-4 mb-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -181,6 +246,7 @@ export function AdminInspections() {
         </div>
       )}
 
+      {/* Inspection history */}
       {inspections.length === 0 ? (
         <p className="text-gray-400">暂未运行过巡检。点击上方按钮开始第一轮巡检。</p>
       ) : (

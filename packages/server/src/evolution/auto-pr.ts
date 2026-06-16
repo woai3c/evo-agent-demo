@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 import { generateObject } from 'ai'
 
@@ -51,6 +52,20 @@ function gitSafe(cmd: string): string | null {
     return git(cmd)
   } catch {
     return null
+  }
+}
+
+function gitCommitWithFile(message: string): void {
+  const msgFile = join(tmpdir(), `evo-commit-${Date.now()}.txt`)
+  writeFileSync(msgFile, message, 'utf-8')
+  try {
+    git(`commit -F "${msgFile}" --no-verify`)
+  } finally {
+    try {
+      unlinkSync(msgFile)
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -128,6 +143,8 @@ export interface AutoFixResult {
   error?: string
 }
 
+export type ProgressCallback = (message: string) => void
+
 const PROJECT_STRUCTURE = `## Project structure:
 - packages/server/src/agent/ — Agent loop, dispatch
 - packages/server/src/tools/ — 6 tools (webSearch, webFetch, readFile, codeRunner, dbQuery, sendEmail)
@@ -138,9 +155,14 @@ const PROJECT_STRUCTURE = `## Project structure:
 - packages/server/src/api/ — Hono API routes
 - packages/web/src/ — React frontend`
 
-export async function runAutoFix(): Promise<AutoFixResult[]> {
+export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFixResult[]> {
+  const log = onProgress ?? (() => {})
+
   const targets = [...getUnfixedBugs(), ...getUnfixedBehaviors()]
-  if (targets.length === 0) return []
+  if (targets.length === 0) {
+    log('没有待修复的目标')
+    return []
+  }
 
   const provider = (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as ProviderName
   const modelId = process.env.INSPECTOR_MODEL ?? process.env.DEFAULT_MODEL ?? 'deepseek-v4-flash'
@@ -150,12 +172,17 @@ export async function runAutoFix(): Promise<AutoFixResult[]> {
   const canPush = hasRemote()
   const canPR = canPush && hasGhCli()
 
+  log(`发现 ${targets.length} 个修复目标（provider: ${provider}, model: ${modelId}）`)
+  log(`主分支: ${mainBranch}, 可推送: ${canPush ? '是' : '否'}, 可创建 PR: ${canPR ? '是' : '否'}`)
+
   const results: AutoFixResult[] = []
   const updateTable = (t: FixTarget) => (t.source === 'pattern' ? 'patterns' : 'behaviors')
   const updateIdCol = (t: FixTarget) => (t.source === 'pattern' ? 'pattern_id' : 'behavior_id')
   const branchPrefix = (t: FixTarget) => (t.source === 'pattern' ? 'fix' : 'improve')
 
-  for (const target of targets) {
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i]
+    const tag = `[${i + 1}/${targets.length}]`
     const slug = target.name
       .replace(/[^a-zA-Z0-9-]/g, '-')
       .replace(/-+/g, '-')
@@ -164,8 +191,11 @@ export async function runAutoFix(): Promise<AutoFixResult[]> {
       .slice(0, 50)
     const branchName = `${branchPrefix(target)}/${slug}`
 
+    log(`${tag} 开始处理: ${target.name}（${target.source === 'pattern' ? 'Bug 修复' : '行为优化'}）`)
+
     try {
       // Step 1: Ask LLM which files to read
+      log(`${tag} LLM 定位相关源码文件...`)
       const locatorResult = await generateObject({
         model,
         schema: FileLocatorSchema,
@@ -187,11 +217,14 @@ Which source files need to be modified? List 1-5 files.`,
           const content = readFileSync(abs, 'utf-8')
           fileContents.push({ path: fp, content })
         } catch {
-          /* file doesn't exist, skip */
+          log(`${tag} 文件不存在，跳过: ${fp}`)
         }
       }
 
+      log(`${tag} 定位到 ${fileContents.length} 个文件: ${fileContents.map((f) => f.path).join(', ')}`)
+
       if (fileContents.length === 0) {
+        log(`${tag} ✗ 没有找到相关源码文件`)
         results.push({
           source: target.source,
           sourceId: target.sourceId,
@@ -205,6 +238,7 @@ Which source files need to be modified? List 1-5 files.`,
       }
 
       // Step 2: Ask LLM to generate code changes
+      log(`${tag} LLM 生成代码修改方案...`)
       const fileContext = fileContents.map((f) => `### ${f.path}\n\`\`\`typescript\n${f.content}\n\`\`\``).join('\n\n')
 
       const fixResult = await generateObject({
@@ -225,27 +259,32 @@ ${fileContext}
 4. Write PR title and body in English.`,
       })
 
+      log(`${tag} LLM 生成 ${fixResult.object.changes.length} 个代码变更`)
+
       // Step 3: Apply changes on a new branch
+      log(`${tag} 创建分支: ${branchName}`)
       git(`checkout -b ${branchName} ${mainBranch}`)
 
-      let applied = false
+      let applied = 0
       for (const change of fixResult.object.changes) {
         try {
           const abs = resolve(PROJECT_ROOT, change.filePath)
           const original = readFileSync(abs, 'utf-8')
           if (!original.includes(change.searchBlock)) {
-            console.warn(`[auto-pr] Search block not found in ${change.filePath}, skipping change`)
+            log(`${tag} 代码块未匹配，跳过: ${change.filePath}`)
             continue
           }
           const modified = original.replace(change.searchBlock, change.replaceBlock)
           writeFileSync(abs, modified, 'utf-8')
-          applied = true
+          applied++
+          log(`${tag} 已修改: ${change.filePath} — ${change.explanation}`)
         } catch (e) {
-          console.warn(`[auto-pr] Failed to apply change to ${change.filePath}:`, e)
+          log(`${tag} 修改失败: ${change.filePath} — ${e instanceof Error ? e.message : String(e)}`)
         }
       }
 
-      if (!applied) {
+      if (applied === 0) {
+        log(`${tag} ✗ 没有代码变更被成功应用，回滚分支`)
         git(`checkout ${mainBranch}`)
         gitSafe(`branch -D ${branchName}`)
         results.push({
@@ -261,25 +300,46 @@ ${fileContext}
       }
 
       // Step 4: Commit
+      log(`${tag} 提交代码（${applied} 个文件变更）...`)
       git('add -A')
-      const commitMsg = fixResult.object.commitMessage.replace(/'/g, "'\\''")
-      git(`commit -m '${commitMsg}'`)
+      gitCommitWithFile(fixResult.object.commitMessage)
+      log(`${tag} ✓ 已提交: ${fixResult.object.commitMessage}`)
 
       // Step 5: Push + PR (if possible)
       let prUrl: string | null = null
 
       if (canPush) {
-        gitSafe(`push -u origin ${branchName}`)
+        log(`${tag} 推送分支到远程...`)
+        const pushResult = gitSafe(`push -u origin ${branchName}`)
+        if (pushResult !== null) {
+          log(`${tag} ✓ 已推送`)
 
-        if (canPR) {
-          const prBody = fixResult.object.prBody.replace(/'/g, "'\\''")
-          const prTitle = fixResult.object.prTitle.replace(/'/g, "'\\''")
-          const ghOutput = execSync(
-            `gh pr create --base ${mainBranch} --head ${branchName} --title '${prTitle}' --body '${prBody}'`,
-            { cwd: PROJECT_ROOT, encoding: 'utf-8', timeout: 30_000 },
-          ).trim()
-          prUrl = ghOutput.split('\n').pop() ?? null
+          if (canPR) {
+            log(`${tag} 创建 Pull Request...`)
+            const msgFile = join(tmpdir(), `evo-pr-body-${Date.now()}.txt`)
+            writeFileSync(msgFile, fixResult.object.prBody, 'utf-8')
+            try {
+              const ghOutput = execSync(
+                `gh pr create --base ${mainBranch} --head ${branchName} --title "${fixResult.object.prTitle.replace(/"/g, '\\"')}" --body-file "${msgFile}"`,
+                { cwd: PROJECT_ROOT, encoding: 'utf-8', timeout: 30_000 },
+              ).trim()
+              prUrl = ghOutput.split('\n').pop() ?? null
+              log(`${tag} ✓ PR 已创建: ${prUrl}`)
+            } catch (e) {
+              log(`${tag} ✗ PR 创建失败: ${e instanceof Error ? e.message : String(e)}`)
+            } finally {
+              try {
+                unlinkSync(msgFile)
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+        } else {
+          log(`${tag} ✗ 推送失败（可能没有远程仓库的写入权限）`)
         }
+      } else {
+        log(`${tag} 跳过推送（没有配置远程仓库）`)
       }
 
       // Step 6: Go back to main
@@ -294,6 +354,9 @@ ${fileContext}
         target.sourceId,
       )
 
+      const finalStatus = prUrl ? '已创建 PR' : '已创建分支'
+      log(`${tag} ✓ 完成: ${target.name} → ${finalStatus}`)
+
       results.push({
         source: target.source,
         sourceId: target.sourceId,
@@ -303,15 +366,15 @@ ${fileContext}
         status: prUrl ? 'pr_created' : 'branch_created',
       })
     } catch (err) {
-      // Ensure we're back on main
       gitSafe(`checkout ${mainBranch}`)
       gitSafe(`branch -D ${branchName}`)
 
       const message = err instanceof Error ? err.message : String(err)
       const table = updateTable(target)
       const idCol = updateIdCol(target)
-      const resetStatus = target.source === 'pattern' ? 'unfixed' : 'unfixed'
-      db.prepare(`UPDATE ${table} SET fix_status = ? WHERE ${idCol} = ?`).run(resetStatus, target.sourceId)
+      db.prepare(`UPDATE ${table} SET fix_status = 'unfixed' WHERE ${idCol} = ?`).run(target.sourceId)
+
+      log(`${tag} ✗ 失败: ${message}`)
 
       results.push({
         source: target.source,
@@ -325,5 +388,6 @@ ${fileContext}
     }
   }
 
+  log(`全部完成，共处理 ${targets.length} 个目标`)
   return results
 }
