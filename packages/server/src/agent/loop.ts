@@ -95,14 +95,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           const errorMsg = typeof resultObj.error === 'string' ? resultObj.error : undefined
           const success = !errorMsg
           // Rate limit check for search tools
-          if (
-            !success &&
-            (part.toolName === 'webSearch' || part.toolName === 'webFetch') &&
-            errorMsg &&
-            /rate limit/i.test(errorMsg)
-          ) {
-            throw new Error(`Search API rate limited: ${errorMsg}`)
-          }
+          // Rate limit errors are propagated to LLM as tool failures; no throw
           tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize, errorMsg)
           yield {
             type: 'tool-result',
