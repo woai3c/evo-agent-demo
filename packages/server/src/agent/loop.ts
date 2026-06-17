@@ -50,7 +50,10 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
   const rawMessages: CoreMessage[] = row ? JSON.parse(row.messages) : []
   rawMessages.push({ role: 'user', content: userMessage })
 
-  const messages = compressMessages(rawMessages)
+  // Filter out messages with undefined/null content to prevent schema errors
+  const validMessages = rawMessages.filter(m => m.content !== undefined && m.content !== null)
+
+  const messages = compressMessages(validMessages)
   const compressionTriggered = messages.length < rawMessages.length
 
   const llmModel = getModel(provider, modelId)
@@ -154,7 +157,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
     }
 
     const response = await result.response
-    const allMessages = [...rawMessages, ...response.messages]
+    const allMessages = [...validMessages, ...response.messages]
 
     db.prepare('UPDATE conversations SET messages = ?, updated_at = datetime(?) WHERE conversation_id = ?').run(
       JSON.stringify(allMessages),
