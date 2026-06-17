@@ -50,122 +50,141 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
   const rawMessages: CoreMessage[] = row ? JSON.parse(row.messages) : []
   rawMessages.push({ role: 'user', content: userMessage })
 
-  const messages = compressMessages(rawMessages)
-  const compressionTriggered = messages.length < rawMessages.length
-
   const llmModel = getModel(provider, modelId)
   const tools = makeTools(userId)
 
   let status: 'success' | 'error' = 'success'
   let pendingToolArgs: Record<string, unknown> = {}
 
-  try {
-    const result = streamText({
-      model: llmModel,
-      system: SYSTEM_PROMPT,
-      messages,
-      tools,
-      maxSteps: 15,
-    })
+  const MAX_RETRIES = 1
+  const RETRY_MAX_TOKENS = 50_000
+  let retryCount = 0
+  let responseMessages: CoreMessage[] = []
 
-    for await (const part of result.fullStream) {
-      switch (part.type) {
-        case 'step-start':
-          tracer.onStepStart()
-          break
+  while (retryCount <= MAX_RETRIES) {
+    const budgetTokens = retryCount === 0 ? undefined : RETRY_MAX_TOKENS
+    const messages = compressMessages(rawMessages, budgetTokens ? { maxTokens: budgetTokens } : undefined)
+    const compressionTriggered = messages.length < rawMessages.length
 
-        case 'text-delta':
-          yield { type: 'text-delta', text: part.textDelta }
-          break
+    try {
+      const result = streamText({
+        model: llmModel,
+        system: SYSTEM_PROMPT,
+        messages,
+        tools,
+        maxSteps: 15,
+      })
 
-        case 'tool-call':
-          tracer.onToolCallStart()
-          pendingToolArgs = (part.args as Record<string, unknown>) || {}
-          yield {
-            type: 'tool-call',
-            toolName: part.toolName as ToolName,
-            input: part.args as Record<string, unknown>,
-          }
-          break
+      for await (const part of result.fullStream) {
+        switch (part.type) {
+          case 'step-start':
+            tracer.onStepStart()
+            break
 
-        case 'tool-result': {
-          const resultObj = (part.result as Record<string, unknown> | undefined) ?? {}
-          const resultStr = JSON.stringify(resultObj)
-          const outputSize = resultStr.length
-          const errorMsg = typeof resultObj.error === 'string' ? resultObj.error : undefined
-          const success = !errorMsg
-          // Rate limit check for search tools
-          if (
-            !success &&
-            (part.toolName === 'webSearch' || part.toolName === 'webFetch') &&
-            errorMsg &&
-            /rate limit/i.test(errorMsg)
-          ) {
-            throw new Error(`Search API rate limited: ${errorMsg}`)
-          }
-          tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize, errorMsg)
-          yield {
-            type: 'tool-result',
-            toolName: part.toolName as ToolName,
-            success,
-            outputSize,
-          }
-          break
-        }
+          case 'text-delta':
+            yield { type: 'text-delta', text: part.textDelta }
+            break
 
-        case 'step-finish':
-          if (part.usage) {
-            const promptTokens = part.usage.promptTokens ?? 0
-            const completionTokens = part.usage.completionTokens ?? 0
-            const totalUsed = promptTokens + completionTokens
-            const maxWindow = 128_000
-
-            const meta = part.providerMetadata
-            let cachedTokens = 0
-            if (meta?.deepseek) {
-              cachedTokens = (meta.deepseek.promptCacheHitTokens as number) ?? 0
-            } else if (meta?.anthropic) {
-              cachedTokens = (meta.anthropic.cacheReadInputTokens as number) ?? 0
-            } else if (meta?.openai) {
-              cachedTokens = (meta.openai.cachedPromptTokens as number) ?? 0
+          case 'tool-call':
+            tracer.onToolCallStart()
+            pendingToolArgs = (part.args as Record<string, unknown>) || {}
+            yield {
+              type: 'tool-call',
+              toolName: part.toolName as ToolName,
+              input: part.args as Record<string, unknown>,
             }
+            break
 
-            tracer.onStepFinish(
-              {
-                promptTokens: part.usage.promptTokens,
-                completionTokens: part.usage.completionTokens,
-                cachedTokens,
-              },
-              {
-                totalTokens: totalUsed,
-                windowUsagePct: totalUsed / maxWindow,
-                compressionTriggered,
-              },
-            )
+          case 'tool-result': {
+            const resultObj = (part.result as Record<string, unknown> | undefined) ?? {}
+            const resultStr = JSON.stringify(resultObj)
+            const outputSize = resultStr.length
+            const errorMsg = typeof resultObj.error === 'string' ? resultObj.error : undefined
+            const success = !errorMsg
+            // Rate limit check for search tools
+            if (
+              !success &&
+              (part.toolName === 'webSearch' || part.toolName === 'webFetch') &&
+              errorMsg &&
+              /rate limit/i.test(errorMsg)
+            ) {
+              throw new Error(`Search API rate limited: ${errorMsg}`)
+            }
+            tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize, errorMsg)
+            yield {
+              type: 'tool-result',
+              toolName: part.toolName as ToolName,
+              success,
+              outputSize,
+            }
+            break
           }
-          break
 
-        case 'error':
-          status = 'error'
-          tracer.onError(String(part.error))
-          yield { type: 'error', message: String(part.error) }
-          break
+          case 'step-finish':
+            if (part.usage) {
+              const promptTokens = part.usage.promptTokens ?? 0
+              const completionTokens = part.usage.completionTokens ?? 0
+              const totalUsed = promptTokens + completionTokens
+              const maxWindow = 128_000
+
+              const meta = part.providerMetadata
+              let cachedTokens = 0
+              if (meta?.deepseek) {
+                cachedTokens = (meta.deepseek.promptCacheHitTokens as number) ?? 0
+              } else if (meta?.anthropic) {
+                cachedTokens = (meta.anthropic.cacheReadInputTokens as number) ?? 0
+              } else if (meta?.openai) {
+                cachedTokens = (meta.openai.cachedPromptTokens as number) ?? 0
+              }
+
+              tracer.onStepFinish(
+                {
+                  promptTokens: part.usage.promptTokens,
+                  completionTokens: part.usage.completionTokens,
+                  cachedTokens,
+                },
+                {
+                  totalTokens: totalUsed,
+                  windowUsagePct: totalUsed / maxWindow,
+                  compressionTriggered,
+                },
+              )
+            }
+            break
+
+          case 'error':
+            status = 'error'
+            tracer.onError(String(part.error))
+            yield { type: 'error', message: String(part.error) }
+            break
+        }
       }
+
+      responseMessages = await result.response.messages
+      break
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      // Retry with more aggressive compression on context overflow
+      if (/context.*(length|exceed|overflow|limit)/i.test(message) || /maximum.*context/i.test(message)) {
+        if (retryCount < MAX_RETRIES) {
+          retryCount++
+          continue
+        }
+      }
+      status = 'error'
+      tracer.onError(message)
+      yield { type: 'error', message }
+      break
     }
+  }
 
-    const response = await result.response
-    const allMessages = [...rawMessages, ...response.messages]
-
+  if (status === 'success') {
+    const allMessages = [...rawMessages, ...responseMessages]
     db.prepare('UPDATE conversations SET messages = ?, updated_at = datetime(?) WHERE conversation_id = ?').run(
       JSON.stringify(allMessages),
       new Date().toISOString(),
       conversationId,
     )
-  } catch (err) {
-    status = 'error'
-    const message = err instanceof Error ? err.message : String(err)
-    tracer.onError(message)
-    yield { type: 'error', message }
   }
 
   const operationId = tracer.finish(status)
