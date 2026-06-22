@@ -8,7 +8,7 @@ import { runInspection } from '../evolution/inspector.js'
 export const inspectionsRoutes = new Hono()
 
 inspectionsRoutes.get('/', async (c) => {
-  const rows = db.prepare('SELECT * FROM inspections ORDER BY round DESC').all() as Record<string, unknown>[]
+  const rows = db.prepare('SELECT * FROM inspections ORDER BY started_at DESC').all() as Record<string, unknown>[]
 
   const inspections = rows.map((r) => ({
     ...r,

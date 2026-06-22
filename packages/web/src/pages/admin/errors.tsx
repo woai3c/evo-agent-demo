@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { fetchErrorBuckets } from '../../lib/admin-api'
+import { formatLocalTime } from '../../lib/format'
 
 interface ErrorRecord {
   error_id: string
@@ -42,13 +43,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   user_error: 'bg-yellow-100 text-yellow-700',
   provider_error: 'bg-orange-100 text-orange-700',
   harness_bug: 'bg-red-100 text-red-700',
-}
-
-function formatLocalTime(utcStr: string): string {
-  const d = new Date(utcStr.endsWith('Z') ? utcStr : utcStr + 'Z')
-  if (isNaN(d.getTime())) return utcStr
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function AdminErrors() {

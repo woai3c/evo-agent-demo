@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock, Coins, Fo
 import { useEffect, useState } from 'react'
 
 import { fetchBehaviors } from '../../lib/admin-api'
+import { formatLocalTime } from '../../lib/format'
 
 interface BehaviorRow {
   behaviorId: string
@@ -154,7 +155,10 @@ export function AdminBehaviors() {
                         ) : null
                       })}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5 truncate">{b.description}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                      {b.description}
+                      <span className="text-gray-400 ml-2">{formatLocalTime(b.firstSeen)}</span>
+                    </p>
                   </div>
 
                   <div className="shrink-0 flex items-center gap-6 text-xs text-gray-500">

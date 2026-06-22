@@ -3,6 +3,7 @@ import { GitPullRequest, Loader2, Play, ScrollText, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { fetchInspections, triggerAutoFix, triggerInspection } from '../../lib/admin-api'
+import { formatLocalTime } from '../../lib/format'
 
 interface AutoFixResultItem {
   source: 'pattern' | 'behavior'
@@ -267,7 +268,7 @@ export function AdminInspections() {
                         <span className="text-red-600 font-medium">{insp.harness_bugs} 个缺陷</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{insp.started_at}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(insp.started_at)}</p>
                   </div>
                 </div>
                 <span className="text-xs text-gray-400">¥{insp.cost.toFixed(4)}</span>

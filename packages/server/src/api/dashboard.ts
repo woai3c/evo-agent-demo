@@ -127,7 +127,7 @@ dashboardRoutes.get('/behaviors', async (c) => {
               tool_error_rate, health_score, health_flags, suggestion,
               suggestion_severity, fix_status, fix_pr_url,
               sample_operations, first_seen, last_seen, created_by
-       FROM behaviors ORDER BY operation_count DESC`,
+       FROM behaviors ORDER BY first_seen DESC`,
     )
     .all() as Record<string, unknown>[]
 
