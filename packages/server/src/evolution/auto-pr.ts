@@ -38,7 +38,11 @@ const CodeFixSchema = z.object({
   ),
   commitMessage: z.string().describe('Git commit message (English, conventional commits format)'),
   prTitle: z.string().describe('PR title (English, under 70 chars)'),
-  prBody: z.string().describe('PR body (English, markdown)'),
+  prBody: z
+    .string()
+    .describe(
+      'PR description in English markdown. Must include: ## Summary (what changed and why), ## Changes (bullet list of each file changed with explanation), ## Test plan (how to verify the fix).',
+    ),
 })
 
 // ── Helpers ──
@@ -305,8 +309,15 @@ ${fileContext}
 ## Instructions:
 1. Generate search-and-replace blocks. The searchBlock must be an EXACT substring of the current file content.
 2. Make minimal, focused changes — fix only the issue described, don't refactor unrelated code.
-3. Write commit message in conventional commits format.
-4. Write PR title and body in English.`,
+3. Write commit message in conventional commits format (English).
+4. Write PR title in English, under 70 characters.
+5. Write a detailed PR body in English markdown with these sections:
+   ## Summary
+   1-3 sentences explaining what the problem was and how this fix addresses it.
+   ## Changes
+   Bullet list of each file modified and what the change does.
+   ## Test plan
+   Steps to verify the fix works (e.g. "Run pnpm simulate --mock && pnpm inspect, confirm no new errors of this type").`,
         log,
         tag,
       })
