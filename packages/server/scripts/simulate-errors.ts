@@ -24,7 +24,7 @@ interface SimPrompt {
   category: string
 }
 
-const USERS = ['sim-alice', 'sim-bob', 'sim-charlie']
+const USERS = ['user']
 
 const PROMPTS: { message: string; category: string }[] = [
   // dbQuery

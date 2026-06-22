@@ -9,47 +9,10 @@ import type { ToolCallInfo } from '../components/chat/ToolCallCard'
 import { fetchConversations, fetchMessages, sendMessageStream } from '../lib/api'
 import type { ConversationRow } from '../lib/api'
 
-function getStoredUser(): string | null {
-  return localStorage.getItem('evo-user-id')
-}
-
-function LoginPrompt({ onLogin }: { onLogin: (userId: string) => void }) {
-  const [name, setName] = useState('')
-
-  const submit = () => {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    localStorage.setItem('evo-user-id', trimmed)
-    onLogin(trimmed)
-  }
-
-  return (
-    <div className="flex items-center justify-center h-[calc(100vh-57px)]">
-      <div className="bg-white rounded-xl border shadow-sm p-8 w-80 text-center">
-        <h2 className="text-lg font-semibold mb-1">欢迎使用 Evo</h2>
-        <p className="text-sm text-gray-500 mb-4">输入用户名即可开始</p>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="用户名（如 alice）"
-          className="w-full rounded-lg border px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          autoFocus
-        />
-        <button
-          onClick={submit}
-          disabled={!name.trim()}
-          className="w-full rounded-lg bg-blue-600 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300"
-        >
-          开始对话
-        </button>
-      </div>
-    </div>
-  )
-}
+const DEFAULT_USER_ID = 'user'
 
 export function Chat() {
-  const [userId, setUserId] = useState<string | null>(getStoredUser)
+  const [userId] = useState(DEFAULT_USER_ID)
   const [conversations, setConversations] = useState<ConversationRow[]>([])
   const [activeConvId, setActiveConvId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -68,7 +31,6 @@ export function Chat() {
   }, [messages, scrollToBottom])
 
   const loadConversations = useCallback(async () => {
-    if (!userId) return
     try {
       const convs = await fetchConversations(userId)
       setConversations(convs)
@@ -78,11 +40,9 @@ export function Chat() {
   }, [userId])
 
   useEffect(() => {
-    if (userId) {
-      fetchConversations(userId)
-        .then(setConversations)
-        .catch(() => {})
-    }
+    fetchConversations(userId)
+      .then(setConversations)
+      .catch(() => {})
   }, [userId])
 
   const loadConversationMessages = useCallback(async (convId: string) => {
@@ -141,7 +101,7 @@ export function Chat() {
 
   const handleSend = useCallback(
     async (text: string) => {
-      if (!userId || isStreaming) return
+      if (isStreaming) return
 
       const userMsg: ChatMessage = { id: `msg-${Date.now()}`, role: 'user', content: text }
       const assistantMsg: ChatMessage = {
@@ -237,10 +197,6 @@ export function Chat() {
     [userId, isStreaming, activeConvId, provider, model, loadConversations],
   )
 
-  if (!userId) {
-    return <LoginPrompt onLogin={setUserId} />
-  }
-
   return (
     <div className="flex h-[calc(100vh-57px)]">
       <ConversationSidebar
@@ -253,9 +209,7 @@ export function Chat() {
       <main className="flex-1 flex flex-col min-w-0">
         <div className="border-b bg-white px-4 py-2 flex items-center justify-between">
           <ProviderSelector provider={provider} model={model} onProviderChange={setProvider} onModelChange={setModel} />
-          <span className="text-xs text-gray-400">
-            当前用户：<strong>{userId}</strong>
-          </span>
+          <span className="text-xs text-gray-400">Evo</span>
         </div>
 
         <div className="flex-1 overflow-y-auto">
