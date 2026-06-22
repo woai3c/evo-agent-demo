@@ -1,9 +1,10 @@
-import { Pencil, Plus } from 'lucide-react'
+import { ChevronDown, Pencil, Plus } from 'lucide-react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { useEffect, useState } from 'react'
 
 import { createPattern, fetchPatterns, fetchTrends, updatePattern } from '../../lib/admin-api'
+import { formatLocalTime } from '../../lib/format'
 
 interface PatternRow {
   pattern_id: string
@@ -130,6 +131,13 @@ export function AdminPatterns() {
   const handleToggleStatus = async (p: PatternRow) => {
     const newStatus = p.status === 'active' ? 'resolved' : 'active'
     await updatePattern(p.pattern_id, { status: newStatus })
+    await load()
+  }
+
+  const handleFixStatusChange = async (p: PatternRow, newFixStatus: string) => {
+    const update: Record<string, unknown> = { fix_status: newFixStatus }
+    if (newFixStatus === 'unfixed') update.fix_pr_url = null
+    await updatePattern(p.pattern_id, update)
     await load()
   }
 
@@ -295,6 +303,7 @@ export function AdminPatterns() {
                 <th className="px-4 py-2 text-left">状态</th>
                 <th className="px-4 py-2 text-left">修复</th>
                 <th className="px-4 py-2 text-left">创建方式</th>
+                <th className="px-4 py-2 text-left">创建时间</th>
                 <th className="px-4 py-2 text-left">操作</th>
               </tr>
             </thead>
@@ -321,41 +330,47 @@ export function AdminPatterns() {
                     </td>
                     <td className="px-4 py-2">
                       {p.category === 'harness_bug' ? (
-                        p.fix_pr_url ? (
-                          <a
-                            href={p.fix_pr_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:underline"
-                          >
-                            PR 已创建
-                          </a>
-                        ) : (
-                          <span
-                            className={`text-xs rounded-full px-2 py-0.5 ${
-                              p.fix_status === 'unfixed'
-                                ? 'bg-red-100 text-red-600'
-                                : p.fix_status === 'branch_created'
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : p.fix_status === 'merged'
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {p.fix_status === 'unfixed'
-                              ? '待修复'
-                              : p.fix_status === 'branch_created'
-                                ? '已创建分支'
-                                : p.fix_status === 'merged'
-                                  ? '已合并'
-                                  : p.fix_status}
-                          </span>
-                        )
+                        <div className="flex items-center gap-1.5">
+                          <div className="relative inline-block">
+                            <select
+                              value={p.fix_status}
+                              onChange={(e) => handleFixStatusChange(p, e.target.value)}
+                              className={`appearance-none text-xs rounded-full pl-2 pr-5 py-0.5 cursor-pointer border-0 ${
+                                p.fix_status === 'unfixed'
+                                  ? 'bg-red-100 text-red-600'
+                                  : p.fix_status === 'pr_created'
+                                    ? 'bg-blue-100 text-blue-600'
+                                    : p.fix_status === 'branch_created'
+                                      ? 'bg-yellow-100 text-yellow-700'
+                                      : p.fix_status === 'merged'
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              <option value="unfixed">待修复</option>
+                              <option value="branch_created">已创建分支</option>
+                              <option value="pr_created">PR 已创建</option>
+                              <option value="merged">已合并</option>
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 opacity-50" />
+                          </div>
+                          {p.fix_pr_url && (
+                            <a
+                              href={p.fix_pr_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              PR
+                            </a>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-xs text-gray-300">—</span>
                       )}
                     </td>
                     <td className="px-4 py-2 text-xs text-gray-500">{p.created_by}</td>
+                    <td className="px-4 py-2 text-xs text-gray-400">{formatLocalTime(p.first_seen)}</td>
                     <td className="px-4 py-2">
                       <div className="flex gap-1">
                         <button

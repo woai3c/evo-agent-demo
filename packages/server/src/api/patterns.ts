@@ -17,7 +17,7 @@ patternsRoutes.get('/', async (c) => {
     params.push(status)
   }
 
-  query += ' ORDER BY hit_count DESC'
+  query += ' ORDER BY first_seen DESC'
 
   const patterns = db.prepare(query).all(...params) as Record<string, unknown>[]
 
@@ -68,7 +68,17 @@ patternsRoutes.patch('/:patternId', async (c) => {
   const fields: string[] = []
   const params: unknown[] = []
 
-  for (const key of ['status', 'user_message', 'resolution', 'name', 'category', 'provider', 'error_type'] as const) {
+  for (const key of [
+    'status',
+    'user_message',
+    'resolution',
+    'name',
+    'category',
+    'provider',
+    'error_type',
+    'fix_status',
+    'fix_pr_url',
+  ] as const) {
     if (body[key] !== undefined) {
       fields.push(`${key} = ?`)
       params.push(body[key])
