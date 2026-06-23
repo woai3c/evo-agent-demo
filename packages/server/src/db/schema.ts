@@ -38,7 +38,9 @@ export function initDatabase(dbPath: string): Database.Database {
       tool_name        TEXT,
       tool_input       TEXT,
       tool_output_size INTEGER,
+      tool_output      TEXT,
       tool_success     INTEGER,
+      llm_response     TEXT,
       error            TEXT,
       context_snapshot TEXT,
       created_at       TEXT NOT NULL DEFAULT (datetime('now'))
@@ -255,6 +257,14 @@ export function initDatabase(dbPath: string): Database.Database {
   if (!patCols.some((c) => c.name === 'fix_status')) {
     db.exec("ALTER TABLE patterns ADD COLUMN fix_status TEXT NOT NULL DEFAULT 'unfixed'")
     db.exec('ALTER TABLE patterns ADD COLUMN fix_pr_url TEXT')
+  }
+
+  const stepCols = db.prepare("PRAGMA table_info('steps')").all() as { name: string }[]
+  if (!stepCols.some((c) => c.name === 'tool_output')) {
+    db.exec('ALTER TABLE steps ADD COLUMN tool_output TEXT')
+  }
+  if (!stepCols.some((c) => c.name === 'llm_response')) {
+    db.exec('ALTER TABLE steps ADD COLUMN llm_response TEXT')
   }
 
   const behCols = db.prepare("PRAGMA table_info('behaviors')").all() as { name: string }[]

@@ -58,6 +58,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
 
   let status: 'success' | 'error' = 'success'
   let pendingToolArgs: Record<string, unknown> = {}
+  let stepText = ''
 
   try {
     const result = streamText({
@@ -72,9 +73,11 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
       switch (part.type) {
         case 'step-start':
           tracer.onStepStart()
+          stepText = ''
           break
 
         case 'text-delta':
+          stepText += part.textDelta
           yield { type: 'text-delta', text: part.textDelta }
           break
 
@@ -103,7 +106,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           ) {
             throw new Error(`Search API rate limited: ${errorMsg}`)
           }
-          tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize, errorMsg)
+          tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize, resultObj, errorMsg)
           yield {
             type: 'tool-result',
             toolName: part.toolName as ToolName,
@@ -141,6 +144,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
                 windowUsagePct: totalUsed / maxWindow,
                 compressionTriggered,
               },
+              stepText || undefined,
             )
           }
           break

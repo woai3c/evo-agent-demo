@@ -22,7 +22,9 @@ export interface InsertStepParams {
   toolName?: string
   toolInput?: Record<string, unknown>
   toolOutputSize?: number
+  toolOutput?: Record<string, unknown>
   toolSuccess?: boolean
+  llmResponse?: string
   error?: { code: string; message: string; providerStatus: number | null }
   contextSnapshot?: { totalTokens: number; windowUsagePct: number; compressionTriggered: boolean }
 }
@@ -43,8 +45,8 @@ const insertOperationStmt = db.prepare(`
 `)
 
 const insertStepStmt = db.prepare(`
-  INSERT INTO steps (step_id, operation_id, step_index, type, duration_ms, tokens, tool_name, tool_input, tool_output_size, tool_success, error, context_snapshot)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO steps (step_id, operation_id, step_index, type, duration_ms, tokens, tool_name, tool_input, tool_output_size, tool_output, tool_success, llm_response, error, context_snapshot)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `)
 
 const insertErrorStmt = db.prepare(`
@@ -81,7 +83,9 @@ export class TraceStore {
       params.toolName ?? null,
       params.toolInput ? JSON.stringify(params.toolInput) : null,
       params.toolOutputSize ?? null,
+      params.toolOutput ? JSON.stringify(params.toolOutput) : null,
       params.toolSuccess != null ? (params.toolSuccess ? 1 : 0) : null,
+      params.llmResponse ?? null,
       params.error ? JSON.stringify(params.error) : null,
       params.contextSnapshot ? JSON.stringify(params.contextSnapshot) : null,
     )

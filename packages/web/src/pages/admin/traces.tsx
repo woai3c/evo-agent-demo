@@ -30,7 +30,9 @@ interface StepRow {
   toolName: string | null
   toolInput: Record<string, unknown> | null
   toolOutputSize: number | null
+  toolOutput: Record<string, unknown> | null
   toolSuccess: boolean | null
+  llmResponse: string | null
   error: { code: string; message: string } | null
 }
 
@@ -272,12 +274,22 @@ function StepTimeline({ steps }: { steps: StepRow[] }) {
                     输入: {JSON.stringify(step.toolInput)}
                   </div>
                 )}
-                {step.toolOutputSize != null && (
+                {step.toolOutput && (
+                  <div className="truncate max-w-2xl" title={JSON.stringify(step.toolOutput)}>
+                    输出: {JSON.stringify(step.toolOutput)}
+                  </div>
+                )}
+                {!step.toolOutput && step.toolOutputSize != null && (
                   <div>
                     输出大小:{' '}
                     {step.toolOutputSize >= 1024
                       ? `${(step.toolOutputSize / 1024).toFixed(1)} KB`
                       : `${step.toolOutputSize} B`}
+                  </div>
+                )}
+                {step.llmResponse && (
+                  <div className="truncate max-w-2xl text-gray-600" title={step.llmResponse}>
+                    回复: {step.llmResponse}
                   </div>
                 )}
                 {step.error && (

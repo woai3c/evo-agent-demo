@@ -34,7 +34,9 @@ export interface Step {
   toolName: ToolName | null
   toolInput: Record<string, unknown> | null
   toolOutputSize: number | null
+  toolOutput: Record<string, unknown> | null
   toolSuccess: boolean | null
+  llmResponse: string | null
   error: StepError | null
   contextSnapshot: ContextSnapshot | null
   createdAt: string

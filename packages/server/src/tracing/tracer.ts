@@ -51,6 +51,7 @@ export class Tracer {
     input: Record<string, unknown>,
     success: boolean,
     outputSize: number,
+    toolOutput: Record<string, unknown>,
     errorMessage?: string,
   ): void {
     const durationMs = Date.now() - this.toolCallStart
@@ -67,6 +68,7 @@ export class Tracer {
       toolName,
       toolInput: sanitizedInput,
       toolOutputSize: outputSize,
+      toolOutput,
       toolSuccess: success,
       error,
     })
@@ -87,6 +89,7 @@ export class Tracer {
   onStepFinish(
     usage: { promptTokens: number; completionTokens: number; cachedTokens?: number },
     contextSnapshot?: { totalTokens: number; windowUsagePct: number; compressionTriggered: boolean },
+    llmResponse?: string,
   ): void {
     const durationMs = Date.now() - this.stepStart
     const cached = usage.cachedTokens ?? 0
@@ -102,6 +105,7 @@ export class Tracer {
       type: 'call_llm',
       durationMs,
       tokens,
+      llmResponse,
       contextSnapshot,
     })
   }
