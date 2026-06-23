@@ -1,14 +1,12 @@
 import type { CoreMessage } from 'ai'
 
-import { getCompressionThreshold } from '../evolution/context-tuner.js'
-
 const AVG_CHARS_PER_TOKEN = 4
 const DEFAULT_WINDOW = 128_000
+const COMPRESSION_THRESHOLD = 0.7
 
 export function compressMessages(messages: CoreMessage[], opts?: { maxTokens?: number }): CoreMessage[] {
   const maxTokens = opts?.maxTokens ?? DEFAULT_WINDOW
-  const threshold = getCompressionThreshold()
-  const budget = Math.floor(maxTokens * threshold)
+  const budget = Math.floor(maxTokens * COMPRESSION_THRESHOLD)
 
   const estimatedTokens = messages.reduce((sum, m) => {
     const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)

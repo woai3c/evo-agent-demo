@@ -11,8 +11,8 @@ import { getModel } from '../providers/registry.js'
 import { estimateCost } from '../tracing/tracer.js'
 import { applyFixes } from './auto-fix.js'
 import { analyzeBehaviors } from './behavior-analyzer.js'
-import { tuneContextStrategy } from './context-tuner.js'
 import { bucketErrors } from './error-bucketer.js'
+import { learnSchemaAliases } from './schema-compat.js'
 
 const PatternSuggestionSchema = z.object({
   patterns: z.array(
@@ -67,8 +67,6 @@ export async function runInspection(onProgress?: ProgressCallback): Promise<stri
   let bugs: z.infer<typeof PatternSuggestionSchema>['bugs'] = []
   let tokensUsed = '{}'
   let cost = 0
-  let tuning = null
-
   // Phase 1: error pattern recognition (only if unmatched errors exist)
   const unmatchedBuckets = bucketErrors({ unmatched: true })
 
@@ -151,9 +149,14 @@ ${bucketSummary}
       log(`✗ Phase 1 LLM 分析失败: ${message}`)
       summary = `Phase 1 failed: ${message}`
     }
+  }
 
-    tuning = tuneContextStrategy()
-    log('上下文策略自调优完成')
+  // Schema compat learning (always runs)
+  const schemaResult = learnSchemaAliases()
+  if (schemaResult.newAliases > 0) {
+    log(`Schema 兼容层: 学习到 ${schemaResult.newAliases} 个新参数别名（总计 ${schemaResult.totalAliases} 个）`)
+  } else {
+    log(`Schema 兼容层: 无新别名（总计 ${schemaResult.totalAliases} 个）`)
   }
 
   // Phase 2: behavior clustering + health evaluation (always runs)
@@ -194,7 +197,7 @@ ${bucketSummary}
     tokensUsed,
     cost,
     summary,
-    JSON.stringify({ newPatterns: patterns, bugs, tuning, behaviorAnalysis }),
+    JSON.stringify({ newPatterns: patterns, bugs, behaviorAnalysis }),
     inspectionId,
   )
 

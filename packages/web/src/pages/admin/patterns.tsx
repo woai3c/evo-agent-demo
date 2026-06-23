@@ -1,7 +1,7 @@
-import { ChevronDown, Pencil, Plus } from 'lucide-react'
+import { ChevronDown, Pencil, Plus, X } from 'lucide-react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { createPattern, fetchPatterns, fetchTrends, updatePattern } from '../../lib/admin-api'
 import { formatLocalTime } from '../../lib/format'
@@ -48,6 +48,8 @@ export function AdminPatterns() {
   const [saving, setSaving] = useState(false)
   const [trendData, setTrendData] = useState<{ date: string; cumulative: number; new_patterns: number }[]>([])
 
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
   const load = () => fetchPatterns().then((data) => setPatterns(data.patterns))
 
   const loadTrend = () =>
@@ -67,10 +69,18 @@ export function AdminPatterns() {
     loadTrend()
   }, [])
 
+  const openDialog = useCallback(() => dialogRef.current?.showModal(), [])
+  const closeDialog = useCallback(() => {
+    dialogRef.current?.close()
+    setShowForm(false)
+    setEditingId(null)
+  }, [])
+
   const openCreate = () => {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setShowForm(true)
+    openDialog()
   }
 
   const openEdit = (p: PatternRow) => {
@@ -87,6 +97,7 @@ export function AdminPatterns() {
       resolution: p.resolution,
     })
     setShowForm(true)
+    openDialog()
   }
 
   const handleSave = async () => {
@@ -119,9 +130,7 @@ export function AdminPatterns() {
           resolution: form.resolution,
         })
       }
-      setForm(EMPTY_FORM)
-      setEditingId(null)
-      setShowForm(false)
+      closeDialog()
       await load()
     } finally {
       setSaving(false)
@@ -154,106 +163,114 @@ export function AdminPatterns() {
         </button>
       </div>
 
-      {showForm && (
-        <div className="border rounded-lg bg-white p-4 mb-6 space-y-3">
-          <h3 className="font-medium text-sm text-gray-700">{editingId ? '编辑 Pattern' : '新建 Pattern'}</h3>
-          <div className="grid grid-cols-2 gap-3">
+      <dialog
+        ref={dialogRef}
+        className="rounded-xl bg-white p-0 shadow-xl backdrop:bg-black/40 w-full max-w-lg"
+        onClose={closeDialog}
+        onClick={(e) => {
+          if (e.target === dialogRef.current) closeDialog()
+        }}
+      >
+        {showForm && (
+          <div className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-800">{editingId ? '编辑 Pattern' : '新建 Pattern'}</h3>
+              <button onClick={closeDialog} className="rounded-full p-1 hover:bg-gray-100">
+                <X className="h-4 w-4 text-gray-400" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">名称 *</label>
+                <input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="如 deepseek-rate-limit-429"
+                  className="w-full rounded border px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">分类</label>
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className="w-full rounded border px-2 py-1.5 text-sm"
+                >
+                  <option value="user_error">用户侧错误</option>
+                  <option value="provider_error">供应商侧错误</option>
+                  <option value="harness_bug">Harness 缺陷</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">供应商</label>
+                <input
+                  value={form.provider}
+                  onChange={(e) => setForm({ ...form, provider: e.target.value })}
+                  placeholder="* 表示通用"
+                  className="w-full rounded border px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">错误类型 *</label>
+                <input
+                  value={form.errorType}
+                  onChange={(e) => setForm({ ...form, errorType: e.target.value })}
+                  placeholder="如 rate_limit"
+                  className="w-full rounded border px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">状态码（可选）</label>
+                <input
+                  value={form.statusCode}
+                  onChange={(e) => setForm({ ...form, statusCode: e.target.value })}
+                  placeholder="如 429"
+                  className="w-full rounded border px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">消息正则（可选）</label>
+                <input
+                  value={form.messageRegex}
+                  onChange={(e) => setForm({ ...form, messageRegex: e.target.value })}
+                  placeholder="如 rate limit"
+                  className="w-full rounded border px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">名称 *</label>
+              <label className="block text-xs text-gray-500 mb-1">用户提示语</label>
               <input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="如 deepseek-rate-limit-429"
+                value={form.userMessage}
+                onChange={(e) => setForm({ ...form, userMessage: e.target.value })}
+                placeholder="显示给用户的友好错误信息"
                 className="w-full rounded border px-2 py-1.5 text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">分类</label>
-              <select
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              <label className="block text-xs text-gray-500 mb-1">修复方式</label>
+              <input
+                value={form.resolution}
+                onChange={(e) => setForm({ ...form, resolution: e.target.value })}
+                placeholder="描述如何修复此类错误"
                 className="w-full rounded border px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={closeDialog} className="rounded border px-4 py-1.5 text-sm hover:bg-gray-50">
+                取消
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !form.name || !form.errorType}
+                className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300"
               >
-                <option value="user_error">用户侧错误</option>
-                <option value="provider_error">供应商侧错误</option>
-                <option value="harness_bug">Harness 缺陷</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">供应商</label>
-              <input
-                value={form.provider}
-                onChange={(e) => setForm({ ...form, provider: e.target.value })}
-                placeholder="* 表示通用"
-                className="w-full rounded border px-2 py-1.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">错误类型 *</label>
-              <input
-                value={form.errorType}
-                onChange={(e) => setForm({ ...form, errorType: e.target.value })}
-                placeholder="如 rate_limit"
-                className="w-full rounded border px-2 py-1.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">状态码（可选）</label>
-              <input
-                value={form.statusCode}
-                onChange={(e) => setForm({ ...form, statusCode: e.target.value })}
-                placeholder="如 429"
-                className="w-full rounded border px-2 py-1.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">消息正则（可选）</label>
-              <input
-                value={form.messageRegex}
-                onChange={(e) => setForm({ ...form, messageRegex: e.target.value })}
-                placeholder="如 rate limit"
-                className="w-full rounded border px-2 py-1.5 text-sm"
-              />
+                {saving ? '保存中...' : editingId ? '保存修改' : '创建'}
+              </button>
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">用户提示语</label>
-            <input
-              value={form.userMessage}
-              onChange={(e) => setForm({ ...form, userMessage: e.target.value })}
-              placeholder="显示给用户的友好错误信息"
-              className="w-full rounded border px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">修复方式</label>
-            <input
-              value={form.resolution}
-              onChange={(e) => setForm({ ...form, resolution: e.target.value })}
-              placeholder="描述如何修复此类错误"
-              className="w-full rounded border px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleSave}
-              disabled={saving || !form.name || !form.errorType}
-              className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300"
-            >
-              {saving ? '保存中...' : editingId ? '保存修改' : '创建'}
-            </button>
-            <button
-              onClick={() => {
-                setShowForm(false)
-                setEditingId(null)
-              }}
-              className="rounded border px-4 py-1.5 text-sm hover:bg-gray-50"
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </dialog>
 
       {trendData.length > 1 && (
         <div className="border rounded-lg bg-white p-4 mb-6">

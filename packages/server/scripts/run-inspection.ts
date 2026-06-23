@@ -15,7 +15,7 @@ config({ path: resolve(import.meta.dirname, '../../../.env') })
 const errorCount = (db.prepare('SELECT COUNT(*) as c FROM errors WHERE pattern_id IS NULL').get() as { c: number }).c
 console.log(`Found ${errorCount} unmatched errors. Running inspection...`)
 
-const inspectionId = await runInspection()
+const inspectionId = await runInspection((msg) => console.log(`  ${msg}`))
 
 const inspection = db.prepare('SELECT * FROM inspections WHERE inspection_id = ?').get(inspectionId) as Record<
   string,

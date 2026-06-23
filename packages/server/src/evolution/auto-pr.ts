@@ -200,7 +200,7 @@ const PROJECT_STRUCTURE = `## Project structure:
 - packages/server/src/agent/ — Agent loop, dispatch
 - packages/server/src/tools/ — 6 tools (webSearch, webFetch, readFile, codeRunner, dbQuery, sendEmail)
 - packages/server/src/tracing/ — Tracer, store, sanitizer
-- packages/server/src/evolution/ — Error bucketer, pattern matcher, inspector, auto-fix, context tuner
+- packages/server/src/evolution/ — Error bucketer, pattern matcher, inspector, auto-fix, schema compat
 - packages/server/src/context/ — Compression, truncation
 - packages/server/src/providers/ — LLM provider registry
 - packages/server/src/api/ — Hono API routes

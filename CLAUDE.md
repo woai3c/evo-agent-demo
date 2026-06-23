@@ -62,7 +62,6 @@ The server has four subsystems that form a pipeline:
    - `auto-fix.ts` — applies fixes: user/provider errors → new pattern + backfill; harness bugs → bug report awaiting human confirmation
    - `auto-pr.ts` — Inspection B: for each unfixed `harness_bug` pattern, LLM locates files → generates code fix → creates git branch/commit/push → opens PR via `gh`. Updates `fix_status`/`fix_pr_url` on the pattern.
    - `behavior-analyzer.ts` — Phase 2a (LLM semantic clustering of operations into behaviors) → Phase 2b (5 deterministic health evaluators) → Phase 2c (LLM suggestions for unhealthy behaviors)
-   - `context-tuner.ts` — adjusts compression thresholds from trace data (L4 agent-autonomous embryo)
 
 5. **Context management** (`context/`) — `compression.ts` reduces message history near window limits. `truncation.ts` applies per-tool head/tail byte budgets.
 

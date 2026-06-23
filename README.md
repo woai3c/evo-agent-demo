@@ -7,8 +7,10 @@
 ```bash
 pnpm install
 cp .env.example .env          # 填入至少一个 LLM API Key
-pnpm db:seed                  # 填充 Chinook 演示数据 + 演示用户
-pnpm dev                      # 同时启动 server (3000) + web (5173)
+pnpm db:seed                  # 填充 Chinook 演示数据
+pnpm build                    # 构建所有包
+pnpm start                    # 启动 server (3000)，不监听文件变更
+pnpm dev:web                  # 另开终端，启动前端 (5173)
 ```
 
 打开 http://localhost:5173 即可开始对话。
@@ -17,19 +19,22 @@ pnpm dev                      # 同时启动 server (3000) + web (5173)
 
 ```bash
 # 1. 模拟多用户流量（含注入错误）
-pnpm simulate
+pnpm simulate --mock
 
-# 2. 运行巡检 Agent，分析未匹配错误并自动生成 Pattern
+# 2. 巡检 A：分析未匹配错误，自动生成 Pattern
 pnpm inspect
 
 # 3. 打开管理面板查看巡检结果
 #    http://localhost:5173/admin
 
 # 4. 重复执行，观察收敛效果（新增 Pattern → 0，覆盖率 → 100%）
-pnpm simulate && pnpm inspect
+pnpm simulate --mock && pnpm inspect
+
+# 5. 巡检 B：为 harness_bug 自动生成 fix PR（需 gh CLI 已登录）
+pnpm autofix
 ```
 
-这就是本书的核心演示闭环：模拟流量 → 产生错误 → 巡检发现 → 自动修复 → 覆盖率上升。
+这就是核心演示闭环：模拟流量 → 产生错误 → 巡检发现 Pattern → 覆盖率上升 → Harness 缺陷自动提 PR 修复。
 
 ## 架构
 
@@ -44,18 +49,18 @@ packages/
 
 ### 服务端子系统
 
-| 子系统     | 路径         | 职责                                                          |
-| ---------- | ------------ | ------------------------------------------------------------- |
-| Agent Loop | `agent/`     | 核心执行引擎 — streamText + maxSteps，工具调度                |
-| 工具（×6） | `tools/`     | webSearch、webFetch、readFile、codeRunner、dbQuery、sendEmail |
-| 供应商     | `providers/` | DeepSeek V4、OpenAI GPT-5.x、Anthropic Claude 4.x             |
-| Tracing    | `tracing/`   | 嵌入式追踪器（run step = trace event）、脱敏、SQLite 持久化   |
-| 进化引擎   | `evolution/` | 错误分桶、Pattern 匹配、巡检 Agent、自动修复流水线            |
-| 上下文     | `context/`   | 消息压缩、工具结果截断                                        |
+| 子系统     | 路径         | 职责                                                                      |
+| ---------- | ------------ | ------------------------------------------------------------------------- |
+| Agent Loop | `agent/`     | 核心执行引擎 — streamText + maxSteps，工具调度                            |
+| 工具（×6） | `tools/`     | webSearch、webFetch、readFile、codeRunner、dbQuery、sendEmail             |
+| 供应商     | `providers/` | DeepSeek、OpenAI、Anthropic、Alibaba (Qwen)、Zhipu (GLM)、Moonshot (Kimi) |
+| Tracing    | `tracing/`   | 嵌入式追踪器（run step = trace event）、脱敏、SQLite 持久化               |
+| 进化引擎   | `evolution/` | 错误分桶、Pattern 匹配、巡检 Agent、自动修复流水线                        |
+| 上下文     | `context/`   | 消息压缩、工具结果截断                                                    |
 
 ### 技术栈
 
-- **LLM 接入**：Vercel AI SDK（DeepSeek / OpenAI / Anthropic）
+- **LLM 接入**：Vercel AI SDK（DeepSeek / OpenAI / Anthropic / Alibaba Qwen / Zhipu GLM / Moonshot Kimi）
 - **后端**：Hono + Node.js + better-sqlite3（零配置）
 - **前端**：React 19 + Tailwind CSS + Recharts
 - **语言**：TypeScript（ESM）
@@ -63,23 +68,29 @@ packages/
 ## 可用命令
 
 ```bash
-pnpm dev                # 同时启动 server + web（开发模式，tsx watch）
-pnpm dev:server         # 仅启动 server（tsx watch 自动重载）
-pnpm dev:web            # 仅启动 web（Vite HMR）
+# 推荐启动方式（server 不监听文件，autofix 安全）
 pnpm build              # 构建所有包
-pnpm start              # 生产模式启动 server（需先 build）
+pnpm start              # 启动 server（不监听文件变更）
+pnpm dev:web            # 另开终端，启动前端（Vite HMR）
+
+# 开发模式（仅在不涉及 autofix 时使用）
+pnpm dev                # 同时启动 server + web（tsx watch，文件变更自动重启）
+pnpm dev:server         # 仅启动 server（tsx watch）
+
+# 代码质量
 pnpm typecheck          # 全量类型检查
 pnpm lint               # ESLint 检查 + 自动修复
 pnpm format             # Prettier 格式化
-pnpm db:seed            # 填充 Chinook 演示数据
-pnpm simulate           # 发送真实对话到 server（需先启动 dev:server，调用 LLM API）
-pnpm simulate 20        # 发送 20 轮对话（默认 10）
-pnpm simulate --mock    # 插入 mock trace 数据（不调用 API，默认 100 条）
-pnpm inspect            # 巡检 A：错误模式识别 + 行为分析
-pnpm autofix            # 巡检 B：自动修复（为 harness bug 生成 PR，不可在 dev 模式使用）
-```
 
-> **注意**：`pnpm autofix` 会修改源码文件并提交 git，不能在 `pnpm dev`（tsx watch）下通过 Web 面板触发，否则文件变更会导致 server 重启中断修复流程。请使用 `pnpm autofix` CLI 命令，或用 `pnpm build && pnpm start` 启动生产模式后再通过面板触发。
+# 数据与演示
+pnpm db:seed            # 填充 Chinook 演示数据
+pnpm simulate           # 发送真实对话到 server（需先启动 server，调用 LLM API，默认 10 条）
+pnpm simulate 20        # 发送 20 轮对话
+pnpm simulate --mock    # 直接往数据库插入 mock trace 数据（不需要启动 server，不调用 API，默认 100 条）
+pnpm simulate --mock 50 # 插入 50 条 mock trace
+pnpm inspect            # 巡检 A：错误模式识别 + 行为分析
+pnpm autofix            # 巡检 B：为 harness bug 自动生成 fix PR（需 gh CLI 已登录）
+```
 
 ## 环境变量
 
@@ -88,6 +99,9 @@ pnpm autofix            # 巡检 B：自动修复（为 harness bug 生成 PR，
 | `DEEPSEEK_API_KEY`   | 至少填一个 | —                   | DeepSeek API Key                                   |
 | `OPENAI_API_KEY`     | —          | —                   | OpenAI API Key                                     |
 | `ANTHROPIC_API_KEY`  | —          | —                   | Anthropic API Key                                  |
+| `ALIBABA_API_KEY`    | —          | —                   | Alibaba Qwen (通义千问) API Key                    |
+| `ZHIPU_API_KEY`      | —          | —                   | Zhipu GLM (智谱) API Key                           |
+| `MOONSHOT_API_KEY`   | —          | —                   | Moonshot Kimi (月之暗面) API Key                   |
 | `TAVILY_API_KEY`     | —          | —                   | Tavily Web Search API Key                          |
 | `DEFAULT_PROVIDER`   | —          | `deepseek`          | 巡检/自动修复的兜底供应商                          |
 | `DEFAULT_MODEL`      | —          | `deepseek-v4-flash` | 巡检/自动修复的兜底模型                            |
@@ -96,32 +110,45 @@ pnpm autofix            # 巡检 B：自动修复（为 harness bug 生成 PR，
 | `PORT`               | —          | `3000`              | 服务端端口                                         |
 | `DB_PATH`            | —          | `./data/evo.db`     | SQLite 数据库路径                                  |
 
-对话默认使用 DeepSeek（硬编码在 `packages/shared/src/constants.ts`）。巡检和自动修复的模型优先级：`INSPECTOR_*` → `DEFAULT_*` → 硬编码兜底值。
+对话默认使用 DeepSeek（硬编码在 `packages/shared/src/constants.ts`），前端可切换供应商。巡检和自动修复的模型优先级：`INSPECTOR_*` → `DEFAULT_*` → 硬编码兜底值。
+
+## `pnpm simulate` vs `pnpm simulate --mock`
+
+|                     | `pnpm simulate`                                                          | `pnpm simulate --mock`                                                                       |
+| ------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| **做什么**          | 从 prompt 池中随机选取问题，通过 HTTP 发送到 server，触发真实 Agent 执行 | 直接往 SQLite 插入构造的 trace 数据（operations + steps + errors）                           |
+| **需要启动 server** | 是                                                                       | 否                                                                                           |
+| **调用 LLM API**    | 是（消耗 token，产生费用）                                               | 否（零成本）                                                                                 |
+| **默认条数**        | 10                                                                       | 100                                                                                          |
+| **产生的数据**      | 真实的 Agent 执行 trace，包含完整的 LLM 回复和工具返回                   | 模拟的 trace 数据，有合理的 token 用量和错误分布（约 35% 错误率），但不含真实的 LLM 回复内容 |
+| **适用场景**        | 测试完整的 Agent 执行链路                                                | 快速积累 trace 数据以演示巡检和 Pattern 收敛效果                                             |
+
+推荐先用 `--mock` 跑一遍完整的巡检流程看效果，再用不带 `--mock` 的模式测试真实 Agent 执行。
 
 ## 核心概念
 
 - **Harness**：包裹 LLM 的运行时 —— Agent 循环、工具、上下文管理、错误恢复。它不是 Agent 本身，而是让 Agent 稳定运行的基础设施。
 - **Tracing 是一等公民**：每一步 Agent 执行自动产生 trace event。如果某一步没有 trace，说明代码有 bug，而不是 trace 没注册。
-- **Self-Evolving**：错误模式从聚合 trace 中自动发现，被分类为用户侧错误 / 供应商侧错误 / Harness 缺陷，并由 LLM 驱动的巡检 Agent 自动修复。
+- **Self-Evolving**：两阶段巡检流水线。**Phase 1**（错误模式识别）：从聚合 trace 中自动发现错误模式，分类为用户侧错误 / 供应商侧错误 / Harness 缺陷，并自动修复（Pattern 入库 + 历史错误回扫；Harness 缺陷自动生成 fix PR）。**Phase 2**（行为分析）：对 operation 做语义聚类，按 5 个维度评估健康度，为不健康行为生成改进建议。
 
-## Self-Evolving 四个层次
+## Self-Evolving 三个层次
 
-| 层次          | 人做什么           | Agent 做什么              | Demo 覆盖             |
-| ------------- | ------------------ | ------------------------- | --------------------- |
-| L1 纯人工     | 看日志、分类、修复 | 无                        | —                     |
-| L2 Agent 辅助 | 确认 + 决策        | 找出可疑问题              | 初始状态              |
-| L3 Agent 主导 | 审查 + 高风险决策  | 采集 / 识别 / 修改 / 提交 | **主要演示**          |
-| L4 Agent 自主 | 设定目标           | 全链路自动 + 自优化       | Context Tuner（胚胎） |
+| 层次          | 人做什么             | Agent 做什么               | Demo 覆盖    |
+| ------------- | -------------------- | -------------------------- | ------------ |
+| L1 纯人工     | 看日志、分类、修复   | 无                         | —            |
+| L2 Agent 辅助 | 确认 + 决策          | 找出可疑问题               | 初始状态     |
+| L3 Agent 主导 | 审查 PR + 高风险决策 | 采集 / 识别 / 修改 / 提 PR | **主要演示** |
 
 ## 管理面板
 
 访问 http://localhost:5173/admin ，左侧边栏导航：
 
 - **概览**：执行次数、成功率、P95 延迟、Pattern 覆盖率
-- **Trace 浏览器**：操作列表，点击展开步骤时间线
+- **Trace 浏览器**：操作列表，点击展开步骤时间线（含完整 LLM 回复和工具返回）
 - **错误分析**：按供应商 × 类型分桶，Top 未匹配错误
-- **Pattern 库**：已发现的 Pattern、匹配规则、命中次数
+- **Pattern 库**：已发现的 Pattern、匹配规则、命中次数、fix_status 管理
 - **巡检记录**：每轮巡检详情、费用、发现的 Harness 缺陷
+- **行为分析**：语义聚类 + 5 维健康度评估 + 改进建议
 - **进化趋势**：成功率曲线、未匹配率下降曲线、Pattern 增长曲线
 
 ## 许可证

@@ -117,6 +117,15 @@ export function initDatabase(dbPath: string): Database.Database {
       created_by      TEXT NOT NULL DEFAULT 'inspector'
     );
 
+    CREATE TABLE IF NOT EXISTS schema_aliases (
+      tool_name     TEXT NOT NULL,
+      wrong_param   TEXT NOT NULL,
+      correct_param TEXT NOT NULL,
+      hit_count     INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (tool_name, wrong_param, correct_param)
+    );
+
     -- ── App tables ──
 
     CREATE TABLE IF NOT EXISTS users (

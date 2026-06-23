@@ -5,6 +5,7 @@ import type { ProviderName, StreamEvent, ToolName } from '@evo/shared'
 
 import { compressMessages } from '../context/compression.js'
 import { db } from '../db/index.js'
+import { applySchemaCompat } from '../evolution/schema-compat.js'
 import { getModel } from '../providers/registry.js'
 import { Tracer } from '../tracing/tracer.js'
 import { makeTools } from './dispatch.js'
@@ -83,11 +84,11 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
 
         case 'tool-call':
           tracer.onToolCallStart()
-          pendingToolArgs = (part.args as Record<string, unknown>) || {}
+          pendingToolArgs = applySchemaCompat(part.toolName, (part.args as Record<string, unknown>) || {})
           yield {
             type: 'tool-call',
             toolName: part.toolName as ToolName,
-            input: part.args as Record<string, unknown>,
+            input: pendingToolArgs,
           }
           break
 
