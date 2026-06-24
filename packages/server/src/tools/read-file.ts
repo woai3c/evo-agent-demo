@@ -27,17 +27,28 @@ export const readFileTool = tool({
       return { error: `Unsupported file type: ${ext}. Supported: ${[...ALLOWED_EXTENSIONS].join(', ')}` }
     }
 
-    try {
-      const content = readFileSync(resolved, 'utf-8')
-      const truncated = content.length > MAX_SIZE
-      return {
-        fileName: fileId,
-        contentLength: content.length,
-        truncated,
-        content: truncated ? content.slice(0, MAX_SIZE) + '\n\n... [file truncated]' : content,
+    const maxRetries = 3
+    const baseDelay = 200
+    let lastError: unknown
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const content = readFileSync(resolved, 'utf-8')
+        const truncated = content.length > MAX_SIZE
+        return {
+          fileName: fileId,
+          contentLength: content.length,
+          truncated,
+          content: truncated ? content.slice(0, MAX_SIZE) + '\n\n... [file truncated]' : content,
+        }
+      } catch (err) {
+        lastError = err
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, attempt)))
+        }
       }
-    } catch {
-      return { error: `File not found: ${fileId}` }
     }
+
+    return { error: `File not found: ${fileId}` }
   },
 })
