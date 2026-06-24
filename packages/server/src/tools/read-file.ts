@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { extname, resolve } from 'node:path'
 
 import { tool } from 'ai'
@@ -27,8 +27,24 @@ export const readFileTool = tool({
       return { error: `Unsupported file type: ${ext}. Supported: ${[...ALLOWED_EXTENSIONS].join(', ')}` }
     }
 
+    const MAX_RETRIES = 3
+    const BASE_DELAY_MS = 100
+
+    const retryWithBackoff = async (fn: () => Promise<string>, retries: number): Promise<string> => {
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          return await fn()
+        } catch (err: any) {
+          if (err.code === 'ENOENT') throw err // permanent
+          if (attempt === retries - 1) throw err
+          await new Promise(resolve => setTimeout(resolve, BASE_DELAY_MS * Math.pow(2, attempt)))
+        }
+      }
+      throw new Error('Unreachable')
+    }
+
     try {
-      const content = readFileSync(resolved, 'utf-8')
+      const content = await retryWithBackoff(() => readFile(resolved, 'utf-8'), MAX_RETRIES)
       const truncated = content.length > MAX_SIZE
       return {
         fileName: fileId,
@@ -36,8 +52,11 @@ export const readFileTool = tool({
         truncated,
         content: truncated ? content.slice(0, MAX_SIZE) + '\n\n... [file truncated]' : content,
       }
-    } catch {
-      return { error: `File not found: ${fileId}` }
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        return { error: `File not found: ${fileId}` }
+      }
+      return { error: `Failed to read file: ${fileId}. Error: ${err.message}` }
     }
   },
 })
