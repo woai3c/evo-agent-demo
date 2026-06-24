@@ -81,6 +81,16 @@ function evaluateHealth(
   return { score, flags }
 }
 
+// A behavior is "unhealthy" if it fails >=2 of the 5 health dimensions (score < 0.8)
+// OR trips a correctness-critical flag. The latter catches behaviors the agent
+// "recovered" from — e.g. 100% tool-error but the operation still succeeded —
+// which score exactly 0.8 yet clearly warrant a suggestion.
+export const CRITICAL_HEALTH_FLAGS: string[] = ['low_success_rate', 'high_tool_error_rate']
+
+export function isUnhealthy(healthScore: number, healthFlags: string[]): boolean {
+  return healthScore < 0.8 || healthFlags.some((f) => CRITICAL_HEALTH_FLAGS.includes(f))
+}
+
 // ── Data Loading ──
 
 interface OperationSummary {
@@ -289,7 +299,7 @@ ${operationLines}
     .filter((r): r is NonNullable<typeof r> => r !== null)
 
   // Phase 2c: LLM suggestions for unhealthy behaviors
-  const unhealthy = behaviorRows.filter((b) => b.healthScore < 0.8)
+  const unhealthy = behaviorRows.filter((b) => isUnhealthy(b.healthScore, b.healthFlags))
 
   if (unhealthy.length > 0) {
     const unhealthyDesc = unhealthy

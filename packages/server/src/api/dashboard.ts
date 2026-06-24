@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 
 import { db } from '../db/index.js'
+import { isUnhealthy } from '../evolution/behavior-analyzer.js'
 
 export const dashboardRoutes = new Hono()
 
@@ -170,7 +171,7 @@ dashboardRoutes.get('/behaviors', async (c) => {
   }))
 
   const totalBehaviors = rows.length
-  const unhealthyCount = rows.filter((b) => (b.healthScore as number) < 0.8).length
+  const unhealthyCount = rows.filter((b) => isUnhealthy(b.healthScore as number, b.healthFlags as string[])).length
   const avgHealthScore =
     totalBehaviors > 0 ? rows.reduce((s, b) => s + (b.healthScore as number), 0) / totalBehaviors : 0
 
