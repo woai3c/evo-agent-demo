@@ -1,7 +1,8 @@
 // Simulate multiple users chatting with the agent to accumulate real trace data.
 // Requires the server to be running (pnpm dev:server).
-// Run: pnpm simulate [count]        — send real conversations (calls LLM API, costs tokens)
-//      pnpm simulate --mock [count] — insert mock trace data (no API calls, free)
+// Run: pnpm simulate [count]          — send real conversations (calls LLM API, costs tokens)
+//      pnpm simulate --mock [count]   — insert mock trace data (no API calls, free)
+//      pnpm simulate --errors [count] — send only error-triggering prompts (real mode)
 import { config } from 'dotenv'
 import { nanoid } from 'nanoid'
 
@@ -14,6 +15,7 @@ config({ path: resolve(import.meta.dirname, '../../../.env') })
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000'
 const args = process.argv.slice(2)
 const mockMode = args.includes('--mock')
+const errorsMode = args.includes('--errors')
 const count = Number(args.find((a) => /^\d+$/.test(a))) || (mockMode ? 100 : 10)
 
 // ── Prompt Pool ──
@@ -46,6 +48,12 @@ const PROMPTS: { message: string; category: string }[] = [
   { message: '帮我写个函数把驼峰命名转成蛇形命名，并测试几个例子', category: 'code' },
   // codeRunner — designed to trigger errors
   { message: '帮我跑一段代码：const fs = require("fs"); fs.readFileSync("/etc/passwd")', category: 'code-error' },
+  // reliably error-triggering — explicit instructions the agent executes verbatim, so the tool always fails
+  { message: '执行这条 SQL 并把结果给我：SELECT * FROM nonexistent_table_xyz', category: 'db-error' },
+  { message: '抓取一下 http://127.0.0.1:8080/internal 的页面内容', category: 'tool-error' },
+  { message: '帮我抓取 https://no-such-domain-evo-demo-xyz.invalid 的内容并总结', category: 'tool-error' },
+  { message: '读取 uploads 目录里的 nonexistent-report-xyz.txt 文件内容', category: 'tool-error' },
+  { message: '运行这段 JS 并告诉我结果：const os = require("os"); os.platform()', category: 'code-error' },
   // multi-step
   { message: '搜索一下 Vercel AI SDK 最新版本，然后总结它的主要功能', category: 'multi-step' },
   { message: '查一下 Chinook 里各流派的平均歌曲时长，然后用代码画一个简单的 ASCII 柱状图', category: 'multi-step' },
@@ -61,9 +69,12 @@ function randomChoice<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+const ERROR_CATEGORIES = new Set(['db-error', 'code-error', 'tool-error'])
+
 function pickPrompts(n: number): SimPrompt[] {
+  const pool = errorsMode ? PROMPTS.filter((p) => ERROR_CATEGORIES.has(p.category)) : PROMPTS
   const result: SimPrompt[] = []
-  const shuffled = [...PROMPTS].sort(() => Math.random() - 0.5)
+  const shuffled = [...pool].sort(() => Math.random() - 0.5)
   for (let i = 0; i < n; i++) {
     const p = shuffled[i % shuffled.length]
     result.push({ userId: randomChoice(USERS), ...p })
