@@ -1,5 +1,5 @@
 import { execFileSync, execSync } from 'node:child_process'
-import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -86,6 +86,42 @@ function hasRemote(): boolean {
   return gitSafe('remote get-url origin') !== null
 }
 
+// Real source-file list so the locator LLM picks exact paths instead of guessing
+// (tool files are kebab-case, e.g. read-file.ts — not readFile.ts).
+function listSourceFiles(): string[] {
+  const out: string[] = []
+  const walk = (rel: string) => {
+    try {
+      for (const e of readdirSync(resolve(PROJECT_ROOT, rel), { withFileTypes: true })) {
+        const child = `${rel}/${e.name}`
+        if (e.isDirectory()) walk(child)
+        else if (/\.(ts|tsx)$/.test(e.name)) out.push(child)
+      }
+    } catch {
+      /* directory may not exist */
+    }
+  }
+  for (const root of ['packages/server/src', 'packages/web/src', 'packages/shared/src']) walk(root)
+  return out
+}
+
+// Resolve an LLM-proposed path to a real file: exact match, on-disk check, or a
+// normalized-basename fuzzy match (handles camelCase vs kebab-case). Returns null
+// when it can't be resolved unambiguously.
+function resolveSourceFile(fp: string, sourceFiles: string[]): string | null {
+  if (sourceFiles.includes(fp)) return fp
+  try {
+    readFileSync(resolve(PROJECT_ROOT, fp), 'utf-8')
+    return fp
+  } catch {
+    /* not on disk as written */
+  }
+  const norm = (s: string) => (s.split('/').pop() ?? s).toLowerCase().replace(/[^a-z0-9.]/g, '')
+  const target = norm(fp)
+  const matches = sourceFiles.filter((f) => norm(f) === target)
+  return matches.length === 1 ? matches[0] : null
+}
+
 // ── Streaming helper ──
 
 async function streamGenerate<T extends z.ZodType>(opts: {
@@ -97,40 +133,47 @@ async function streamGenerate<T extends z.ZodType>(opts: {
   timeoutMs?: number
 }): Promise<{ object: z.infer<T>; usage?: { promptTokens: number; completionTokens: number } }> {
   const { model, schema, prompt, log, tag, timeoutMs = 300_000 } = opts
-  const abort = AbortSignal.timeout(timeoutMs)
-  const start = Date.now()
+  const maxAttempts = 2
+  let lastErr: unknown
 
-  const { partialObjectStream, object, usage } = streamObject({
-    model,
-    schema,
-    prompt,
-    abortSignal: abort,
-  })
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const start = Date.now()
+      const { partialObjectStream, object, usage } = streamObject({
+        model,
+        schema,
+        prompt,
+        abortSignal: AbortSignal.timeout(timeoutMs),
+      })
 
-  let lastLogTime = 0
-  let tokenCount = 0
-  for await (const _partial of partialObjectStream) {
-    tokenCount++
-    const now = Date.now()
-    if (now - lastLogTime > 10_000) {
-      const elapsed = Math.round((now - start) / 1000)
-      log(`${tag} LLM 生成中...（${elapsed}s）`)
-      lastLogTime = now
+      let lastLogTime = 0
+      for await (const _partial of partialObjectStream) {
+        const now = Date.now()
+        if (now - lastLogTime > 10_000) {
+          log(`${tag} LLM 生成中...（${Math.round((now - start) / 1000)}s）`)
+          lastLogTime = now
+        }
+      }
+
+      log(`${tag} LLM 响应完成（${Math.round((Date.now() - start) / 1000)}s）`)
+
+      const finalObject = await object
+      const finalUsage = await usage
+      return {
+        object: finalObject,
+        usage: finalUsage
+          ? { promptTokens: finalUsage.promptTokens, completionTokens: finalUsage.completionTokens }
+          : undefined,
+      }
+    } catch (err) {
+      // deepseek-v4-flash occasionally returns output that doesn't match the
+      // schema; one retry usually fixes it.
+      lastErr = err
+      if (attempt < maxAttempts) log(`${tag} ⚠ LLM 输出不合规，重试中...`)
     }
   }
 
-  const elapsed = Math.round((Date.now() - start) / 1000)
-  log(`${tag} LLM 响应完成（${elapsed}s）`)
-
-  const finalObject = await object
-  const finalUsage = await usage
-
-  return {
-    object: finalObject,
-    usage: finalUsage
-      ? { promptTokens: finalUsage.promptTokens, completionTokens: finalUsage.completionTokens }
-      : undefined,
-  }
+  throw lastErr
 }
 
 // ── Fix Target ──
@@ -257,6 +300,7 @@ export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFix
   const updateTable = (t: FixTarget) => (t.source === 'pattern' ? 'patterns' : 'behaviors')
   const updateIdCol = (t: FixTarget) => (t.source === 'pattern' ? 'pattern_id' : 'behavior_id')
   const branchPrefix = (t: FixTarget) => (t.source === 'pattern' ? 'fix' : 'improve')
+  const sourceFiles = listSourceFiles()
 
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i]
@@ -283,9 +327,12 @@ export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFix
 
 ${PROJECT_STRUCTURE}
 
+## Actual source files (use these EXACT paths — files are kebab-case, e.g. tools/web-fetch.ts, NOT webFetch.ts):
+${sourceFiles.join('\n')}
+
 ${target.locatorPromptExtra}
 
-Which source files need to be modified? List 1-5 files.`,
+Which source files need to be modified? List 1-5 files, using exact paths from the list above.`,
         log,
         tag,
       })
@@ -294,13 +341,13 @@ Which source files need to be modified? List 1-5 files.`,
       const fileContents: { path: string; content: string }[] = []
 
       for (const fp of filePaths) {
-        try {
-          const abs = resolve(PROJECT_ROOT, fp)
-          const content = readFileSync(abs, 'utf-8')
-          fileContents.push({ path: fp, content })
-        } catch {
+        const resolved = resolveSourceFile(fp, sourceFiles)
+        if (!resolved) {
           log(`${tag} 文件不存在，跳过: ${fp}`)
+          continue
         }
+        if (resolved !== fp) log(`${tag} 已修正文件名: ${fp} → ${resolved}`)
+        fileContents.push({ path: resolved, content: readFileSync(resolve(PROJECT_ROOT, resolved), 'utf-8') })
       }
 
       log(`${tag} 定位到 ${fileContents.length} 个文件: ${fileContents.map((f) => f.path).join(', ')}`)

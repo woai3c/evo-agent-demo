@@ -1,4 +1,4 @@
-import { GitPullRequest, Loader2, Play, ScrollText, Wrench } from 'lucide-react'
+import { Check, Copy, GitPullRequest, Loader2, Play, ScrollText, Wrench } from 'lucide-react'
 
 import { useEffect, useRef, useState } from 'react'
 
@@ -37,6 +37,7 @@ let cachedFixResults: AutoFixResultItem[] | null = null
 
 function LogPanel({ logs, title }: { logs: string[]; title: string }) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -44,12 +45,30 @@ function LogPanel({ logs, title }: { logs: string[]; title: string }) {
 
   if (logs.length === 0) return null
 
+  const copyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(logs.join('\n'))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard unavailable (e.g. non-secure context) */
+    }
+  }
+
   return (
     <div className="border rounded-lg bg-gray-900 text-gray-100 mb-6 overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
         <ScrollText className="h-4 w-4 text-gray-400" />
         <span className="text-xs font-medium text-gray-300">{title}</span>
         <span className="text-[10px] text-gray-500 ml-auto">{logs.length} 条日志</span>
+        <button
+          onClick={copyLogs}
+          title="复制全部日志"
+          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-gray-300 hover:bg-gray-700"
+        >
+          {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+          {copied ? '已复制' : '复制'}
+        </button>
       </div>
       <div className="max-h-64 overflow-y-auto p-3 font-mono text-xs leading-relaxed space-y-0.5">
         {logs.map((log, i) => (
