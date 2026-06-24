@@ -134,6 +134,14 @@ dashboardRoutes.get('/behaviors', async (c) => {
     )
     .all() as Record<string, unknown>[]
 
+  // Resolve each sample operation to its source question (conversation title)
+  // so the UI shows what the operation was, not a raw operation id.
+  const opTitleStmt = db.prepare(
+    `SELECT c.title FROM operations o
+     LEFT JOIN conversations c ON o.conversation_id = c.conversation_id
+     WHERE o.operation_id = ?`,
+  )
+
   const rows = behaviors.map((b) => ({
     behaviorId: b.behavior_id,
     name: b.name,
@@ -152,7 +160,10 @@ dashboardRoutes.get('/behaviors', async (c) => {
     suggestionSeverity: b.suggestion_severity ?? 'none',
     fixStatus: b.fix_status ?? 'none',
     fixPrUrl: b.fix_pr_url ?? null,
-    sampleOperations: JSON.parse((b.sample_operations as string) || '[]'),
+    sampleOperations: (JSON.parse((b.sample_operations as string) || '[]') as string[]).map((id) => ({
+      id,
+      title: (opTitleStmt.get(id) as { title: string | null } | undefined)?.title ?? null,
+    })),
     firstSeen: b.first_seen,
     lastSeen: b.last_seen,
     createdBy: b.created_by,

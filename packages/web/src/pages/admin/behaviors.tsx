@@ -23,7 +23,7 @@ interface BehaviorRow {
   suggestionSeverity: 'none' | 'critical' | 'suggestion'
   fixStatus: 'none' | 'unfixed' | 'branch_created' | 'pr_created' | 'merged'
   fixPrUrl: string | null
-  sampleOperations: string[]
+  sampleOperations: { id: string; title: string | null }[]
   firstSeen: string
   lastSeen: string
 }
@@ -309,13 +309,14 @@ export function AdminBehaviors() {
                       <div>
                         <h4 className="text-xs font-semibold text-gray-500 mb-1">代表性 Operation</h4>
                         <div className="flex flex-wrap gap-1">
-                          {b.sampleOperations.map((opId) => (
+                          {b.sampleOperations.map((op) => (
                             <a
-                              key={opId}
-                              href={`/admin/traces?op=${opId}`}
-                              className="text-xs font-mono text-blue-600 hover:underline bg-blue-50 rounded px-2 py-0.5"
+                              key={op.id}
+                              href={`/admin/traces?op=${op.id}`}
+                              title={op.title ?? op.id}
+                              className="inline-block max-w-[220px] truncate rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-600 hover:underline"
                             >
-                              {opId.slice(0, 16)}...
+                              {op.title || `${op.id.slice(0, 16)}...`}
                             </a>
                           ))}
                         </div>

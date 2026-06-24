@@ -27,7 +27,7 @@ const BehaviorClusterSchema = z.object({
 const BehaviorSuggestionSchema = z.object({
   suggestions: z.array(
     z.object({
-      behaviorName: z.string(),
+      behaviorIndex: z.number().describe('The 0-based index of the behavior from the numbered list above'),
       severity: z
         .enum(['critical', 'suggestion'])
         .describe(
@@ -141,7 +141,13 @@ function loadOperationSummaries(limit: number): OperationSummary[] {
 
       if (!userMessage) return null
 
-      const tokens = JSON.parse((op.total_tokens as string) || '{"input":0,"output":0}')
+      // Guard the parse: one malformed total_tokens row shouldn't abort the whole analysis.
+      let tokens: { input?: number; output?: number } = {}
+      try {
+        tokens = JSON.parse((op.total_tokens as string) || '{}')
+      } catch {
+        /* keep zero tokens */
+      }
 
       return {
         operationId: op.operation_id as string,
@@ -288,8 +294,8 @@ ${operationLines}
   if (unhealthy.length > 0) {
     const unhealthyDesc = unhealthy
       .map(
-        (b) =>
-          `- "${b.name}" (health=${b.healthScore.toFixed(1)}, flags=[${b.healthFlags.join(',')}])
+        (b, i) =>
+          `[${i}] "${b.name}" (health=${b.healthScore.toFixed(1)}, flags=[${b.healthFlags.join(',')}])
     success_rate=${(b.successRate * 100).toFixed(0)}%, avg_duration=${(b.avgDuration / 1000).toFixed(1)}s, avg_steps=${b.avgSteps.toFixed(1)}, avg_cost=¥${b.avgCost.toFixed(4)}, tool_error_rate=${(b.toolErrorRate * 100).toFixed(0)}%
     tool_sequence: ${b.toolSequence}`,
       )
@@ -310,7 +316,8 @@ ${unhealthyDesc}
 2. Write suggestions in Chinese (this is a Chinese-facing product)
 3. Be specific and actionable — avoid vague advice like "optimize performance"
 4. Focus on what the Harness code can do differently, NOT what the LLM prompt should say
-5. Set severity to "critical" ONLY when the fix is concrete and clearly actionable as a code change (e.g. "add retry with backoff to webFetch tool", "add input validation to dbQuery"). Set to "suggestion" for advisory or less certain improvements.`,
+5. Set severity to "critical" ONLY when the fix is concrete and clearly actionable as a code change (e.g. "add retry with backoff to webFetch tool", "add input validation to dbQuery"). Set to "suggestion" for advisory or less certain improvements.
+6. Reference each behavior by its bracketed [index] number via behaviorIndex.`,
         abortSignal: AbortSignal.timeout(300_000),
       })
 
@@ -318,7 +325,8 @@ ${unhealthyDesc}
       totalTokensUsed.output += suggestionResult.usage?.completionTokens ?? 0
 
       for (const s of suggestionResult.object.suggestions) {
-        const match = behaviorRows.find((b) => b.name === s.behaviorName)
+        // Map by index into the unhealthy list (stable) — names can collide.
+        const match = unhealthy[s.behaviorIndex]
         if (match) {
           match.suggestion = s.suggestion
           match.suggestionSeverity = s.severity
