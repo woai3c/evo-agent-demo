@@ -115,7 +115,7 @@ ${bucketSummary}
         model,
         schema: PatternSuggestionSchema,
         prompt,
-        abortSignal: AbortSignal.timeout(300_000),
+        abortSignal: AbortSignal.timeout(120_000),
       })
 
       patterns = result.object.patterns
@@ -159,7 +159,7 @@ ${bucketSummary}
   log('Phase 2: 行为聚类分析...')
   let behaviorAnalysis = null
   try {
-    behaviorAnalysis = await analyzeBehaviors()
+    behaviorAnalysis = await analyzeBehaviors(log)
     log(`Phase 2 完成: ${behaviorAnalysis.behaviorsFound} 个行为模式，${behaviorAnalysis.unhealthyCount} 个不健康`)
     if (behaviorAnalysis.tokensUsed.input > 0) {
       const prev = tokensUsed !== '{}' ? JSON.parse(tokensUsed) : { input: 0, output: 0, cached: 0 }

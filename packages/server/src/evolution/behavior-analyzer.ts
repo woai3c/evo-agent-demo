@@ -203,7 +203,7 @@ export interface BehaviorAnalysisResult {
   cost: number
 }
 
-export async function analyzeBehaviors(): Promise<BehaviorAnalysisResult> {
+export async function analyzeBehaviors(log: (msg: string) => void = () => {}): Promise<BehaviorAnalysisResult> {
   const summaries = loadOperationSummaries(200)
 
   if (summaries.length < 5) {
@@ -224,6 +224,7 @@ export async function analyzeBehaviors(): Promise<BehaviorAnalysisResult> {
     )
     .join('\n')
 
+  log(`Phase 2a: 正在用 LLM 对 ${summaries.length} 条 operation 进行语义聚类...`)
   const clusterResult = await generateObject({
     model,
     schema: BehaviorClusterSchema,
@@ -239,8 +240,9 @@ ${operationLines}
 3. Name each behavior concisely (e.g. "Web Research + Summary", "Database Query", "Code Execution")
 4. Include the operation_ids that belong to each behavior
 5. Describe what the behavior pattern does in 1-2 sentences`,
-    abortSignal: AbortSignal.timeout(300_000),
+    abortSignal: AbortSignal.timeout(120_000),
   })
+  log(`Phase 2a 完成: 识别到 ${clusterResult.object.behaviors.length} 个行为模式`)
 
   const totalTokensUsed = {
     input: clusterResult.usage?.promptTokens ?? 0,
@@ -313,6 +315,7 @@ ${operationLines}
       .join('\n')
 
     try {
+      log(`Phase 2c: 正在为 ${unhealthy.length} 个不健康行为生成改进建议...`)
       const suggestionResult = await generateObject({
         model,
         schema: BehaviorSuggestionSchema,
@@ -329,8 +332,9 @@ ${unhealthyDesc}
 4. Focus on what the Harness code can do differently, NOT what the LLM prompt should say
 5. Set severity to "critical" ONLY when the fix is concrete and clearly actionable as a code change (e.g. "add retry with backoff to webFetch tool", "add input validation to dbQuery"). Set to "suggestion" for advisory or less certain improvements.
 6. Reference each behavior by its bracketed [index] number via behaviorIndex.`,
-        abortSignal: AbortSignal.timeout(300_000),
+        abortSignal: AbortSignal.timeout(120_000),
       })
+      log(`Phase 2c 完成: 生成了 ${suggestionResult.object.suggestions.length} 条改进建议`)
 
       totalTokensUsed.input += suggestionResult.usage?.promptTokens ?? 0
       totalTokensUsed.output += suggestionResult.usage?.completionTokens ?? 0

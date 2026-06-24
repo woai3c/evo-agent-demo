@@ -4,7 +4,11 @@
 
 ## 快速开始
 
+> **建议先 Fork 本仓库，再克隆你自己的 Fork。** 自动修复（`pnpm autofix`）会通过 `gh` 向 `origin` 远程**真实创建 PR**——直接克隆原仓库的话 `origin` 指向本项目，你的测试 PR 会提到这里来；Fork 后 `origin` 指向你自己的仓库，PR 就落在你的 Fork 上。
+
 ```bash
+git clone https://github.com/<your-username>/evo-agent-demo   # 换成你 Fork 后的仓库地址
+cd evo-agent-demo
 pnpm install
 cp .env.example .env          # 填入至少一个 LLM API Key
 pnpm db:seed                  # 填充 Chinook 演示数据
@@ -34,7 +38,7 @@ pnpm inspect
 # 4. 重复执行，观察收敛效果（新增 Pattern → 0，覆盖率 → 100%）
 pnpm simulate --mock && pnpm inspect
 
-# 5. 巡检 B：为 harness_bug 自动生成 fix PR —— 不需要 server（需 gh CLI 已登录）
+# 5. 巡检 B：为 harness_bug / critical 行为自动生成 fix PR —— PR 提交到你的 origin（务必先 Fork！需 gh CLI 已登录）
 pnpm autofix
 ```
 

@@ -43,7 +43,8 @@ interface AutofixRunRow {
 // Module-level state survives component remount
 let activePromise: Promise<unknown> | null = null
 let activeType: 'inspect' | 'autofix' | null = null
-let cachedLogs: string[] = []
+let cachedInspectLogs: string[] = []
+let cachedAutofixLogs: string[] = []
 let cachedFixResults: AutoFixResultItem[] | null = null
 
 function LogPanel({ logs, title }: { logs: string[]; title: string }) {
@@ -98,7 +99,8 @@ export function AdminInspections() {
   const [inspections, setInspections] = useState<InspectionRow[]>([])
   const [running, setRunning] = useState(() => activeType === 'inspect')
   const [fixing, setFixing] = useState(() => activeType === 'autofix')
-  const [logs, setLogs] = useState<string[]>(() => [...cachedLogs])
+  const [inspectLogs, setInspectLogs] = useState<string[]>(() => [...cachedInspectLogs])
+  const [autofixLogs, setAutofixLogs] = useState<string[]>(() => [...cachedAutofixLogs])
   const [fixResults, setFixResults] = useState<AutoFixResultItem[] | null>(() => cachedFixResults)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [tab, setTab] = useState<'inspect' | 'autofix'>('inspect')
@@ -111,9 +113,14 @@ export function AdminInspections() {
       .then((data) => setAutofixRuns(data?.runs ?? []))
       .catch(() => setAutofixRuns([]))
 
-  const appendLog = (msg: string) => {
-    cachedLogs.push(msg)
-    setLogs((prev) => [...prev, msg])
+  const appendInspectLog = (msg: string) => {
+    cachedInspectLogs.push(msg)
+    setInspectLogs((prev) => [...prev, msg])
+  }
+
+  const appendAutofixLog = (msg: string) => {
+    cachedAutofixLogs.push(msg)
+    setAutofixLogs((prev) => [...prev, msg])
   }
 
   useEffect(() => {
@@ -138,16 +145,15 @@ export function AdminInspections() {
 
   const runInspection = async () => {
     setRunning(true)
-    setLogs([])
-    setFixResults(null)
-    cachedLogs = []
-    cachedFixResults = null
+    setTab('inspect')
+    setInspectLogs([])
+    cachedInspectLogs = []
     activeType = 'inspect'
 
     const promise = triggerInspection({
       onLog: (msg) => {
-        if (mountedRef.current) appendLog(msg)
-        else cachedLogs.push(msg)
+        if (mountedRef.current) appendInspectLog(msg)
+        else cachedInspectLogs.push(msg)
       },
     })
     activePromise = promise
@@ -164,16 +170,17 @@ export function AdminInspections() {
 
   const runAutofix = async () => {
     setFixing(true)
-    setLogs([])
+    setTab('autofix')
+    setAutofixLogs([])
     setFixResults(null)
-    cachedLogs = []
+    cachedAutofixLogs = []
     cachedFixResults = null
     activeType = 'autofix'
 
     const promise = triggerAutoFix({
       onLog: (msg) => {
-        if (mountedRef.current) appendLog(msg)
-        else cachedLogs.push(msg)
+        if (mountedRef.current) appendAutofixLog(msg)
+        else cachedAutofixLogs.push(msg)
       },
       onDone: (data) => {
         const results = (data as { results?: AutoFixResultItem[] }).results ?? []
@@ -190,7 +197,6 @@ export function AdminInspections() {
       activeType = null
       if (mountedRef.current) {
         setFixing(false)
-        setTab('autofix')
         loadAutofixRuns()
       }
     }
@@ -230,65 +236,6 @@ export function AdminInspections() {
         </div>
       </div>
 
-      {/* Real-time log panel */}
-      <LogPanel logs={logs} title={running ? '巡检 A 执行日志' : fixing ? '巡检 B 自动修复日志' : '执行日志'} />
-
-      {/* Fix results */}
-      {fixResults && fixResults.length > 0 && (
-        <div className="border rounded-lg bg-white p-4 mb-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-            <GitPullRequest className="h-4 w-4" />
-            自动修复结果
-          </h3>
-          <div className="space-y-2">
-            {fixResults.map((r) => (
-              <div
-                key={r.sourceId}
-                className={`text-sm rounded px-3 py-2 ${
-                  r.status === 'failed'
-                    ? 'bg-red-50 text-red-800'
-                    : r.status === 'pr_created'
-                      ? 'bg-green-50 text-green-800'
-                      : 'bg-yellow-50 text-yellow-800'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] rounded px-1.5 py-0.5 ${r.source === 'pattern' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}
-                    >
-                      {r.source === 'pattern' ? 'Bug 修复' : '行为优化'}
-                    </span>
-                    <span className="font-medium">{r.sourceName}</span>
-                  </div>
-                  <span className="text-xs">
-                    {r.status === 'pr_created' ? '已创建 PR' : r.status === 'branch_created' ? '已创建分支' : '失败'}
-                  </span>
-                </div>
-                {r.prUrl && (
-                  <a
-                    href={r.prUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:underline"
-                  >
-                    {r.prUrl}
-                  </a>
-                )}
-                {r.status === 'branch_created' && <p className="text-xs mt-0.5">分支: {r.branch}</p>}
-                {r.error && <p className="text-xs mt-0.5">错误: {r.error}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {fixResults && fixResults.length === 0 && (
-        <div className="border rounded-lg bg-gray-50 p-4 mb-6 text-sm text-gray-500">
-          没有待修复的 Harness 缺陷。请先运行巡检 A 识别问题。
-        </div>
-      )}
-
       {/* Tabs: Inspection A history vs Auto-fix (Inspection B) history */}
       <div className="flex gap-1 border-b mb-4">
         <button
@@ -306,119 +253,192 @@ export function AdminInspections() {
       </div>
 
       {tab === 'inspect' ? (
-        inspections.length === 0 ? (
-          <p className="text-gray-400">暂未运行过巡检。点击上方按钮开始第一轮巡检。</p>
-        ) : (
-          <div className="space-y-3">
-            {inspections.map((insp) => (
-              <div key={insp.inspection_id} className="border rounded-lg bg-white">
-                <button
-                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
-                  onClick={() => setExpandedId(expandedId === insp.inspection_id ? null : insp.inspection_id)}
-                >
-                  <div className="flex items-center gap-4">
-                    <span className="text-lg font-bold text-blue-600">#{insp.round}</span>
-                    <div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <span>分析 {insp.traces_analyzed} 条错误</span>
-                        <span className="text-green-600 font-medium">+{insp.new_patterns} Pattern</span>
-                        {insp.harness_bugs > 0 && (
-                          <span className="text-red-600 font-medium">{insp.harness_bugs} 个缺陷</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(insp.started_at)}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-400">¥{insp.cost.toFixed(4)}</span>
-                </button>
-
-                {expandedId === insp.inspection_id && (
-                  <div className="border-t px-4 py-3 bg-gray-50">
-                    <p className="text-sm mb-3">{insp.summary}</p>
-                    {insp.details?.bugs && insp.details.bugs.length > 0 && (
-                      <div className="mt-2">
-                        <h3 className="text-sm font-semibold text-red-600 mb-1">Harness 缺陷</h3>
-                        {insp.details.bugs.map((bug, i) => (
-                          <div key={i} className="text-xs bg-red-50 rounded p-2 mb-1">
-                            <span
-                              className={`rounded px-1 py-0.5 mr-2 ${bug.severity === 'high' ? 'bg-red-200' : bug.severity === 'medium' ? 'bg-yellow-200' : 'bg-gray-200'}`}
-                            >
-                              {bug.severity}
-                            </span>
-                            <strong>{bug.title}</strong>: {bug.description}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )
-      ) : autofixRuns.length === 0 ? (
-        <p className="text-gray-400">暂未运行过自动修复。点击上方“巡检 B：自动修复”开始。</p>
+        <LogPanel logs={inspectLogs} title="巡检 A 执行日志" />
       ) : (
-        <div className="space-y-3">
-          {autofixRuns.map((run) => (
-            <div key={run.run_id} className="border rounded-lg bg-white">
-              <button
-                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
-                onClick={() => setExpandedId(expandedId === run.run_id ? null : run.run_id)}
-              >
-                <div className="flex items-center gap-4">
-                  <GitPullRequest className="h-5 w-5 text-emerald-600" />
-                  <div>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span>处理 {run.total_targets} 个目标</span>
-                      {run.pr_created > 0 && <span className="font-medium text-green-600">{run.pr_created} PR</span>}
-                      {run.branch_created > 0 && (
-                        <span className="font-medium text-yellow-600">{run.branch_created} 分支</span>
-                      )}
-                      {run.failed > 0 && <span className="font-medium text-red-600">{run.failed} 失败</span>}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(run.started_at)}</p>
-                  </div>
-                </div>
-              </button>
+        <LogPanel logs={autofixLogs} title="巡检 B 自动修复日志" />
+      )}
 
-              {expandedId === run.run_id && (
-                <div className="border-t px-4 py-3 bg-gray-50 space-y-1.5">
-                  {run.results.length === 0 ? (
-                    <p className="text-sm text-gray-400">无目标</p>
-                  ) : (
-                    run.results.map((r) => (
-                      <div key={r.sourceId} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-[10px] rounded px-1.5 py-0.5 ${r.source === 'pattern' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}
-                          >
-                            {r.source === 'pattern' ? 'Bug 修复' : '行为优化'}
-                          </span>
-                          <span>{r.sourceName}</span>
+      {tab === 'inspect' ? (
+        <>
+          {inspections.length === 0 ? (
+            <p className="text-gray-400">暂未运行过巡检。点击上方按钮开始第一轮巡检。</p>
+          ) : (
+            <div className="space-y-3">
+              {inspections.map((insp) => (
+                <div key={insp.inspection_id} className="border rounded-lg bg-white">
+                  <button
+                    className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
+                    onClick={() => setExpandedId(expandedId === insp.inspection_id ? null : insp.inspection_id)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="text-lg font-bold text-blue-600">#{insp.round}</span>
+                      <div>
+                        <div className="flex items-center gap-3 text-sm">
+                          <span>分析 {insp.traces_analyzed} 条错误</span>
+                          <span className="text-green-600 font-medium">+{insp.new_patterns} Pattern</span>
+                          {insp.harness_bugs > 0 && (
+                            <span className="text-red-600 font-medium">{insp.harness_bugs} 个缺陷</span>
+                          )}
                         </div>
-                        {r.prUrl ? (
-                          <a
-                            href={r.prUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:underline"
-                          >
-                            PR
-                          </a>
-                        ) : (
-                          <span className="text-xs text-gray-400">
-                            {r.status === 'failed' ? '失败' : r.status === 'branch_created' ? '仅分支' : r.status}
-                          </span>
-                        )}
+                        <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(insp.started_at)}</p>
                       </div>
-                    ))
+                    </div>
+                    <span className="text-xs text-gray-400">¥{insp.cost.toFixed(4)}</span>
+                  </button>
+
+                  {expandedId === insp.inspection_id && (
+                    <div className="border-t px-4 py-3 bg-gray-50">
+                      <p className="text-sm mb-3">{insp.summary}</p>
+                      {insp.details?.bugs && insp.details.bugs.length > 0 && (
+                        <div className="mt-2">
+                          <h3 className="text-sm font-semibold text-red-600 mb-1">Harness 缺陷</h3>
+                          {insp.details.bugs.map((bug, i) => (
+                            <div key={i} className="text-xs bg-red-50 rounded p-2 mb-1">
+                              <span
+                                className={`rounded px-1 py-0.5 mr-2 ${bug.severity === 'high' ? 'bg-red-200' : bug.severity === 'medium' ? 'bg-yellow-200' : 'bg-gray-200'}`}
+                              >
+                                {bug.severity}
+                              </span>
+                              <strong>{bug.title}</strong>: {bug.description}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
+      ) : (
+        <>
+          {fixResults && fixResults.length > 0 && (
+            <div className="border rounded-lg bg-white p-4 mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <GitPullRequest className="h-4 w-4" />
+                自动修复结果
+              </h3>
+              <div className="space-y-2">
+                {fixResults.map((r) => (
+                  <div
+                    key={r.sourceId}
+                    className={`text-sm rounded px-3 py-2 ${
+                      r.status === 'failed'
+                        ? 'bg-red-50 text-red-800'
+                        : r.status === 'pr_created'
+                          ? 'bg-green-50 text-green-800'
+                          : 'bg-yellow-50 text-yellow-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-[10px] rounded px-1.5 py-0.5 ${r.source === 'pattern' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}
+                        >
+                          {r.source === 'pattern' ? 'Bug 修复' : '行为优化'}
+                        </span>
+                        <span className="font-medium">{r.sourceName}</span>
+                      </div>
+                      <span className="text-xs">
+                        {r.status === 'pr_created'
+                          ? '已创建 PR'
+                          : r.status === 'branch_created'
+                            ? '已创建分支'
+                            : '失败'}
+                      </span>
+                    </div>
+                    {r.prUrl && (
+                      <a
+                        href={r.prUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        {r.prUrl}
+                      </a>
+                    )}
+                    {r.status === 'branch_created' && <p className="text-xs mt-0.5">分支: {r.branch}</p>}
+                    {r.error && <p className="text-xs mt-0.5">错误: {r.error}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {fixResults && fixResults.length === 0 && (
+            <div className="border rounded-lg bg-gray-50 p-4 mb-6 text-sm text-gray-500">
+              没有待修复的 Harness 缺陷。请先运行巡检 A 识别问题。
+            </div>
+          )}
+
+          {autofixRuns.length === 0 ? (
+            <p className="text-gray-400">暂未运行过自动修复。点击上方“巡检 B：自动修复”开始。</p>
+          ) : (
+            <div className="space-y-3">
+              {autofixRuns.map((run) => (
+                <div key={run.run_id} className="border rounded-lg bg-white">
+                  <button
+                    className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
+                    onClick={() => setExpandedId(expandedId === run.run_id ? null : run.run_id)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <GitPullRequest className="h-5 w-5 text-emerald-600" />
+                      <div>
+                        <div className="flex items-center gap-3 text-sm">
+                          <span>处理 {run.total_targets} 个目标</span>
+                          {run.pr_created > 0 && (
+                            <span className="font-medium text-green-600">{run.pr_created} PR</span>
+                          )}
+                          {run.branch_created > 0 && (
+                            <span className="font-medium text-yellow-600">{run.branch_created} 分支</span>
+                          )}
+                          {run.failed > 0 && <span className="font-medium text-red-600">{run.failed} 失败</span>}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(run.started_at)}</p>
+                      </div>
+                    </div>
+                  </button>
+
+                  {expandedId === run.run_id && (
+                    <div className="border-t px-4 py-3 bg-gray-50 space-y-1.5">
+                      {run.results.length === 0 ? (
+                        <p className="text-sm text-gray-400">无目标</p>
+                      ) : (
+                        run.results.map((r) => (
+                          <div key={r.sourceId} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-[10px] rounded px-1.5 py-0.5 ${r.source === 'pattern' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}
+                              >
+                                {r.source === 'pattern' ? 'Bug 修复' : '行为优化'}
+                              </span>
+                              <span>{r.sourceName}</span>
+                            </div>
+                            {r.prUrl ? (
+                              <a
+                                href={r.prUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:underline"
+                              >
+                                PR
+                              </a>
+                            ) : (
+                              <span className="text-xs text-gray-400">
+                                {r.status === 'failed' ? '失败' : r.status === 'branch_created' ? '仅分支' : r.status}
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
