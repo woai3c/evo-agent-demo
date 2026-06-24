@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 
 import type { ProviderName, TokenUsage } from '@evo/shared'
 
-import { sanitizeToolInput } from './sanitizer.js'
+import { sanitizeText, sanitizeToolInput, sanitizeToolOutput } from './sanitizer.js'
 import { traceStore } from './store.js'
 
 interface TracerParams {
@@ -68,7 +68,7 @@ export class Tracer {
       toolName,
       toolInput: sanitizedInput,
       toolOutputSize: outputSize,
-      toolOutput,
+      toolOutput: sanitizeToolOutput(toolOutput),
       toolSuccess: success,
       error,
     })
@@ -105,7 +105,7 @@ export class Tracer {
       type: 'call_llm',
       durationMs,
       tokens,
-      llmResponse,
+      llmResponse: llmResponse ? sanitizeText(llmResponse) : undefined,
       contextSnapshot,
     })
   }

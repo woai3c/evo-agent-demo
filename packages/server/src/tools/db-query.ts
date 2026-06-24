@@ -1,8 +1,16 @@
+import Database from 'better-sqlite3'
+
 import { tool } from 'ai'
 
 import { z } from 'zod'
 
-import { db } from '../db/index.js'
+import { dbPath } from '../db/index.js'
+
+// dbQuery executes untrusted, LLM-generated SQL. The string guards below are
+// best-effort UX only; the real enforcement is this dedicated read-only
+// connection, so a bypassed guard (leading comment / CTE / RETURNING clause)
+// still cannot mutate the database.
+const readonlyDb = new Database(dbPath, { readonly: true })
 
 const FORBIDDEN_RE = /^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|REINDEX|VACUUM)\b/i
 const MAX_ROWS = 100
@@ -35,7 +43,7 @@ export const dbQueryTool = tool({
     }
 
     try {
-      const rows = db.prepare(sql).all() as Record<string, unknown>[]
+      const rows = readonlyDb.prepare(sql).all() as Record<string, unknown>[]
       const truncated = rows.length > MAX_ROWS
       const limited = truncated ? rows.slice(0, MAX_ROWS) : rows
       const columns = limited.length > 0 ? Object.keys(limited[0]) : []

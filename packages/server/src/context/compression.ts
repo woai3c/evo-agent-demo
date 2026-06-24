@@ -17,9 +17,17 @@ export function compressMessages(messages: CoreMessage[], opts?: { maxTokens?: n
 
   const systemMsgs = messages.filter((m) => m.role === 'system')
   const lastN = 4
-  const tail = messages.slice(-lastN)
+  // Don't let the kept tail begin with a tool result whose assistant tool-call
+  // got dropped into the summary — providers reject an orphaned tool message
+  // (400). Walk the boundary back to include the assistant that owns any leading
+  // tool results.
+  let tailStart = Math.max(systemMsgs.length, messages.length - lastN)
+  while (tailStart > systemMsgs.length && messages[tailStart]?.role === 'tool') {
+    tailStart--
+  }
 
-  const middle = messages.slice(systemMsgs.length, -lastN)
+  const tail = messages.slice(tailStart)
+  const middle = messages.slice(systemMsgs.length, tailStart)
   if (middle.length === 0) return messages
 
   const summaryParts: string[] = []

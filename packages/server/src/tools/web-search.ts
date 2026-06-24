@@ -18,31 +18,38 @@ export const webSearchTool = tool({
       return { error: 'Web search is not configured (TAVILY_API_KEY missing)', results: [] }
     }
 
-    const res = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query,
-        max_results: Math.min(maxResults, 10),
-        include_answer: true,
-      }),
-      signal: AbortSignal.timeout(15_000),
-    })
+    try {
+      const res = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: apiKey,
+          query,
+          max_results: Math.min(maxResults, 10),
+          include_answer: true,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      })
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      return { error: `Search API error: ${res.status} ${text.slice(0, 200)}`, results: [] }
-    }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        return { error: `Search API error: ${res.status} ${text.slice(0, 200)}`, results: [] }
+      }
 
-    const data = await res.json()
-    return {
-      answer: data.answer ?? null,
-      results: (data.results ?? []).map((r: Record<string, unknown>) => ({
-        title: r.title,
-        url: r.url,
-        snippet: typeof r.content === 'string' ? r.content.slice(0, 500) : '',
-      })),
+      const data = await res.json()
+      return {
+        answer: data.answer ?? null,
+        results: (data.results ?? []).map((r: Record<string, unknown>) => ({
+          title: r.title,
+          url: r.url,
+          snippet: typeof r.content === 'string' ? r.content.slice(0, 500) : '',
+        })),
+      }
+    } catch (err) {
+      // Network failure / timeout (AbortSignal) / malformed JSON would otherwise
+      // throw and kill the agent loop; return an error result instead.
+      const message = err instanceof Error ? err.message : String(err)
+      return { error: `Web search failed: ${message}`, results: [] }
     }
   },
 })

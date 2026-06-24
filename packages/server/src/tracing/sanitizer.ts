@@ -8,20 +8,38 @@ function maskFilePath(p: string): string {
   return `***${sep}${parts[parts.length - 1]}`
 }
 
-export function sanitizeToolInput(input: Record<string, unknown>): Record<string, unknown> {
-  const sanitized: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(input)) {
-    if (typeof value === 'string') {
-      sanitized[key] = value
-        .replace(API_KEY_RE, '***')
-        .replace(EMAIL_RE, (m) => {
-          const [local, domain] = m.split('@')
-          return `${local[0]}***@***${domain.slice(domain.lastIndexOf('.'))}`
-        })
-        .replace(FILE_PATH_RE, maskFilePath)
-    } else {
-      sanitized[key] = value
-    }
+function sanitizeString(s: string): string {
+  return s
+    .replace(API_KEY_RE, '***')
+    .replace(EMAIL_RE, (m) => {
+      const [local, domain] = m.split('@')
+      return `${local[0]}***@***${domain.slice(domain.lastIndexOf('.'))}`
+    })
+    .replace(FILE_PATH_RE, maskFilePath)
+}
+
+function sanitizeValue(value: unknown): unknown {
+  if (typeof value === 'string') return sanitizeString(value)
+  if (Array.isArray(value)) return value.map(sanitizeValue)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = sanitizeValue(v)
+    return out
   }
-  return sanitized
+  return value
+}
+
+// Tool inputs, tool outputs, and LLM responses can carry secrets (API keys),
+// PII (emails), or local file paths. Scrub them (recursively) before persisting
+// to the trace, which is exposed via the admin API.
+export function sanitizeToolInput(input: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeValue(input) as Record<string, unknown>
+}
+
+export function sanitizeToolOutput(output: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeValue(output) as Record<string, unknown>
+}
+
+export function sanitizeText(text: string): string {
+  return sanitizeString(text)
 }

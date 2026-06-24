@@ -34,27 +34,34 @@ export const webFetchTool = tool({
       return { error: 'Fetching private/internal URLs is not allowed', url }
     }
 
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Evo-Agent/1.0' },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(15_000),
-    })
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Evo-Agent/1.0' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(15_000),
+      })
 
-    if (!res.ok) {
-      return { error: `HTTP ${res.status} ${res.statusText}`, url }
-    }
+      if (!res.ok) {
+        return { error: `HTTP ${res.status} ${res.statusText}`, url }
+      }
 
-    const contentType = res.headers.get('content-type') ?? ''
-    const raw = await res.text()
-    const text = contentType.includes('text/html') ? stripHtml(raw) : raw
+      const contentType = res.headers.get('content-type') ?? ''
+      const raw = await res.text()
+      const text = contentType.includes('text/html') ? stripHtml(raw) : raw
 
-    const maxLength = 20_000
-    const truncated = text.length > maxLength
-    return {
-      url,
-      contentLength: text.length,
-      truncated,
-      text: truncated ? text.slice(0, maxLength) + '\n\n... [content truncated]' : text,
+      const maxLength = 20_000
+      const truncated = text.length > maxLength
+      return {
+        url,
+        contentLength: text.length,
+        truncated,
+        text: truncated ? text.slice(0, maxLength) + '\n\n... [content truncated]' : text,
+      }
+    } catch (err) {
+      // Network failure / DNS / timeout (AbortSignal) would otherwise throw and
+      // kill the agent loop; return an error result so the model can recover.
+      const message = err instanceof Error ? err.message : String(err)
+      return { error: `Failed to fetch URL: ${message}`, url }
     }
   },
 })

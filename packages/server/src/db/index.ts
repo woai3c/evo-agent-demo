@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path'
 
 import { initDatabase } from './schema.js'
 
-const dbPath = process.env.DB_PATH || resolve('data', 'evo.db')
+export const dbPath = process.env.DB_PATH || resolve('data', 'evo.db')
 const dir = dirname(dbPath)
 if (!existsSync(dir)) {
   mkdirSync(dir, { recursive: true })

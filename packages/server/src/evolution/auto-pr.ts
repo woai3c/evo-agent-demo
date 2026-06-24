@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -147,20 +147,47 @@ interface FixTarget {
 function getUnfixedBugs(): FixTarget[] {
   const patterns = db
     .prepare(
-      `SELECT pattern_id, name, resolution, match_rule, error_type
+      `SELECT pattern_id, name, match_rule, error_type, hit_count
        FROM patterns
-       WHERE category = 'harness_bug' AND fix_status = 'unfixed' AND resolution != ''`,
+       WHERE category = 'harness_bug' AND fix_status = 'unfixed'`,
     )
-    .all() as { pattern_id: string; name: string; resolution: string; match_rule: string; error_type: string }[]
+    .all() as { pattern_id: string; name: string; match_rule: string; error_type: string; hit_count: number }[]
 
-  return patterns.map((p) => ({
-    source: 'pattern' as const,
-    sourceId: p.pattern_id,
-    name: p.name,
-    description: `Error type: ${p.error_type}\nResolution/Root cause: ${p.resolution}\nMatch rule: ${p.match_rule}`,
-    locatorPromptExtra: `## Bug to fix:\nName: ${p.name}\nError type: ${p.error_type}\nResolution/Root cause: ${p.resolution}\nMatch rule: ${p.match_rule}`,
-    fixPromptExtra: `## Bug:\nName: ${p.name}\nError type: ${p.error_type}\nResolution: ${p.resolution}\n\nIn the PR body, reference: "Fixes harness bug pattern: ${p.pattern_id} (${p.name})".`,
-  }))
+  // Resolution is no longer pre-generated. Instead, the fixer analyzes the root cause
+  // at fix time from real error samples linked to this pattern, plus the trigger count.
+  const sampleStmt = db.prepare(
+    `SELECT message, provider, status_code, tool_name
+     FROM errors WHERE pattern_id = ? ORDER BY created_at DESC LIMIT 5`,
+  )
+
+  return patterns.map((p) => {
+    const samples = sampleStmt.all(p.pattern_id) as {
+      message: string
+      provider: string
+      status_code: number | null
+      tool_name: string | null
+    }[]
+
+    const sampleText = samples.length
+      ? samples
+          .map(
+            (s, i) =>
+              `  ${i + 1}. [provider=${s.provider} status=${s.status_code ?? 'N/A'} tool=${s.tool_name ?? 'N/A'}] ${s.message}`,
+          )
+          .join('\n')
+      : '  (no error samples recorded for this pattern)'
+
+    const context = `Error type: ${p.error_type}\nMatch rule: ${p.match_rule}\nTrigger count: ${p.hit_count}\nReal error samples (most recent first):\n${sampleText}`
+
+    return {
+      source: 'pattern' as const,
+      sourceId: p.pattern_id,
+      name: p.name,
+      description: context,
+      locatorPromptExtra: `## Bug to fix:\nName: ${p.name}\n${context}`,
+      fixPromptExtra: `## Bug:\nName: ${p.name}\n${context}\n\nAnalyze the root cause from the real error samples above, then fix the harness code. In the PR body, reference: "Fixes harness bug pattern: ${p.pattern_id} (${p.name})".`,
+    }
+  })
 }
 
 function getUnfixedBehaviors(): FixTarget[] {
@@ -240,7 +267,9 @@ export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFix
       .replace(/^-|-$/g, '')
       .toLowerCase()
       .slice(0, 50)
-    const branchName = `${branchPrefix(target)}/${slug}`
+    // Include the unique sourceId so similar names — or names that collide after
+    // the 50-char slug truncation — don't produce the same branch.
+    const branchName = `${branchPrefix(target)}/${slug}-${target.sourceId}`
 
     log(`${tag} 开始处理: ${target.name}（${target.source === 'pattern' ? 'Bug 修复' : '行为优化'}）`)
 
@@ -333,6 +362,7 @@ ${fileContext}
       git(`checkout -b ${branchName} ${mainBranch}`)
 
       let applied = 0
+      const appliedPaths: string[] = []
       for (const change of changes) {
         try {
           const abs = resolve(PROJECT_ROOT, change.filePath)
@@ -346,6 +376,7 @@ ${fileContext}
           const modified = original.replace(change.searchBlock, change.replaceBlock)
           writeFileSync(abs, modified, 'utf-8')
           applied++
+          appliedPaths.push(change.filePath)
           log(`${tag} ✓ 已修改: ${change.filePath}`)
         } catch (e) {
           log(`${tag} ✗ 修改失败: ${change.filePath} — ${e instanceof Error ? e.message : String(e)}`)
@@ -370,7 +401,9 @@ ${fileContext}
 
       // Step 4: Commit
       log(`${tag} 提交代码（${applied} 个文件变更）...`)
-      git('add -A')
+      // Stage only the files we actually modified — never `git add -A`, which would
+      // sweep in unrelated/untracked files (e.g. local notes) and push them in the PR.
+      execFileSync('git', ['add', '--', ...appliedPaths], { cwd: PROJECT_ROOT, timeout: 30_000 })
       gitCommitWithFile(fixResult.object.commitMessage)
       log(`${tag} ✓ 已提交: ${fixResult.object.commitMessage}`)
 
@@ -388,8 +421,22 @@ ${fileContext}
             const msgFile = join(tmpdir(), `evo-pr-body-${Date.now()}.txt`)
             writeFileSync(msgFile, fixResult.object.prBody, 'utf-8')
             try {
-              const ghOutput = execSync(
-                `gh pr create --base ${mainBranch} --head ${branchName} --title "${fixResult.object.prTitle.replace(/"/g, '\\"')}" --body-file "${msgFile}"`,
+              // Pass args as an array (no shell) so an LLM-generated title containing
+              // backticks/$()/;/| can't be interpreted as a shell command.
+              const ghOutput = execFileSync(
+                'gh',
+                [
+                  'pr',
+                  'create',
+                  '--base',
+                  mainBranch,
+                  '--head',
+                  branchName,
+                  '--title',
+                  fixResult.object.prTitle,
+                  '--body-file',
+                  msgFile,
+                ],
                 { cwd: PROJECT_ROOT, encoding: 'utf-8', timeout: 30_000 },
               ).trim()
               prUrl = ghOutput.split('\n').pop() ?? null

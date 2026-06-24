@@ -98,6 +98,9 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           const outputSize = resultStr.length
           const errorMsg = typeof resultObj.error === 'string' ? resultObj.error : undefined
           const success = !errorMsg
+          // Use the args carried by this result, not the shared pendingToolArgs —
+          // otherwise parallel tool calls in one step trace each other's input.
+          const toolInput = ((part as { args?: Record<string, unknown> }).args ?? {}) as Record<string, unknown>
           // Rate limit check for search tools
           if (
             !success &&
@@ -107,7 +110,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           ) {
             throw new Error(`Search API rate limited: ${errorMsg}`)
           }
-          tracer.onToolResult(part.toolName, pendingToolArgs, success, outputSize, resultObj, errorMsg)
+          tracer.onToolResult(part.toolName, toolInput, success, outputSize, resultObj, errorMsg)
           yield {
             type: 'tool-result',
             toolName: part.toolName as ToolName,
@@ -124,20 +127,24 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
             const totalUsed = promptTokens + completionTokens
             const maxWindow = 128_000
 
+            // Provider cache-hit token fields are sometimes NaN/undefined (e.g.
+            // DeepSeek omits prompt_cache_hit_tokens). `NaN ?? 0` is still NaN, so
+            // coerce to a finite number — otherwise cost and cached totals become NaN.
+            const toFinite = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
             const meta = part.providerMetadata
             let cachedTokens = 0
             if (meta?.deepseek) {
-              cachedTokens = (meta.deepseek.promptCacheHitTokens as number) ?? 0
+              cachedTokens = toFinite(meta.deepseek.promptCacheHitTokens)
             } else if (meta?.anthropic) {
-              cachedTokens = (meta.anthropic.cacheReadInputTokens as number) ?? 0
+              cachedTokens = toFinite(meta.anthropic.cacheReadInputTokens)
             } else if (meta?.openai) {
-              cachedTokens = (meta.openai.cachedPromptTokens as number) ?? 0
+              cachedTokens = toFinite(meta.openai.cachedPromptTokens)
             }
 
             tracer.onStepFinish(
               {
-                promptTokens: part.usage.promptTokens,
-                completionTokens: part.usage.completionTokens,
+                promptTokens,
+                completionTokens,
                 cachedTokens,
               },
               {
