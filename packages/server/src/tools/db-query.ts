@@ -14,6 +14,12 @@ const readonlyDb = new Database(dbPath, { readonly: true })
 
 const FORBIDDEN_RE = /^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|REINDEX|VACUUM)\b/i
 const MAX_ROWS = 100
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 100
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 const SCHEMA_HINT = `Available tables (Chinook music store):
 - artists (artist_id, name)
