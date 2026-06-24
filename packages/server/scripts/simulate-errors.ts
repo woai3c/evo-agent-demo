@@ -214,9 +214,13 @@ function runMock(n: number) {
     { type: 'tool_error', code: null as number | null, message: 'HTTP 403 Forbidden', toolName: 'webFetch' },
   ]
 
+  const insertConv = db.prepare(
+    `INSERT INTO conversations (conversation_id, user_id, title, model, provider, created_at)
+     VALUES (?, ?, ?, ?, ?, datetime('now', '-' || ? || ' minutes'))`,
+  )
   const insertOp = db.prepare(
-    `INSERT INTO operations (operation_id, user_id, model, provider, status, total_steps, total_duration, total_tokens, cost, error_summary, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' minutes'))`,
+    `INSERT INTO operations (operation_id, conversation_id, user_id, model, provider, status, total_steps, total_duration, total_tokens, cost, error_summary, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' minutes'))`,
   )
   const insertStep = db.prepare(
     `INSERT INTO steps (step_id, operation_id, step_index, type, duration_ms, tokens, tool_name, tool_success, error, created_at)
@@ -246,8 +250,15 @@ function runMock(n: number) {
       const cost = tokensIn * 0.000001 + tokensOut * 0.000003
       const error = isError ? randomChoice(ERROR_TYPES) : null
 
+      // Give each mock operation a realistic source conversation so the admin
+      // UI shows the user's question instead of a meaningless operation id.
+      const prompt = randomChoice(PROMPTS)
+      const convId = `conv_sim_${nanoid()}`
+      insertConv.run(convId, userId, prompt.message.slice(0, 50), model, provider, minutesAgo)
+
       insertOp.run(
         opId,
+        convId,
         userId,
         model,
         provider,

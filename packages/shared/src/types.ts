@@ -78,8 +78,6 @@ export interface Pattern {
   provider: string
   errorType: string
   matchRule: MatchRule
-  userMessage: string
-  resolution: string
   hitCount: number
   firstSeen: string
   lastSeen: string

@@ -20,8 +20,6 @@ function loadPatterns(): Pattern[] {
     provider: r.provider as string,
     errorType: r.error_type as string,
     matchRule: JSON.parse((r.match_rule as string) || '{}') as MatchRule,
-    userMessage: r.user_message as string,
-    resolution: r.resolution as string,
     hitCount: r.hit_count as number,
     firstSeen: r.first_seen as string,
     lastSeen: r.last_seen as string,

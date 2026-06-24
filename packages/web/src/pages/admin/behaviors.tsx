@@ -200,7 +200,10 @@ export function AdminBehaviors() {
                           { label: '平均步数', value: b.avgSteps.toFixed(1), icon: Footprints },
                           {
                             label: '平均 Token',
-                            value: b.avgTokens > 1000 ? `${(b.avgTokens / 1000).toFixed(1)}k` : String(b.avgTokens),
+                            value:
+                              b.avgTokens > 1000
+                                ? `${(b.avgTokens / 1000).toFixed(1)}k`
+                                : String(Math.round(b.avgTokens)),
                             icon: Gauge,
                           },
                           { label: '平均费用', value: `¥${b.avgCost.toFixed(4)}`, icon: Coins },

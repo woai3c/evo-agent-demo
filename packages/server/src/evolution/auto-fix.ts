@@ -14,8 +14,6 @@ interface PatternSuggestion {
     messageRegex?: string
     errorType?: string
   }
-  userMessage: string
-  resolution: string
 }
 
 export function applyFixes(
@@ -27,8 +25,8 @@ export function applyFixes(
   let totalBackfilled = 0
 
   const insertPattern = db.prepare(
-    `INSERT INTO patterns (pattern_id, name, category, provider, error_type, match_rule, user_message, resolution, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO patterns (pattern_id, name, category, provider, error_type, match_rule, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
 
   db.transaction(() => {
@@ -49,8 +47,6 @@ export function applyFixes(
         provider,
         p.errorType,
         JSON.stringify(p.matchRule),
-        p.userMessage,
-        p.resolution,
         `inspector_round_${round}`,
       )
 

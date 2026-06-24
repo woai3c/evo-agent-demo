@@ -17,6 +17,7 @@ interface ErrorRecord {
   pattern_id: string | null
   pattern_name: string | null
   pattern_category: string | null
+  operation_title: string | null
   created_at: string
 }
 
@@ -28,13 +29,14 @@ interface ErrorData {
   recentErrors: ErrorRecord[]
 }
 
-function heatColor(count: number, max: number): string {
-  if (count === 0 || max === 0) return 'bg-gray-50 text-gray-300'
+function heatStyle(count: number, max: number): { backgroundColor: string; color: string } {
+  if (count === 0 || max === 0) return { backgroundColor: '#fafafa', color: '#d1d5db' }
   const ratio = count / max
-  if (ratio > 0.6) return 'bg-red-500 text-white font-bold'
-  if (ratio > 0.3) return 'bg-red-300 text-red-900'
-  if (ratio > 0.1) return 'bg-red-100 text-red-700'
-  return 'bg-red-50 text-red-600'
+  const alpha = 0.15 + 0.85 * ratio
+  return {
+    backgroundColor: `rgba(239, 68, 68, ${alpha.toFixed(3)})`,
+    color: ratio > 0.5 ? '#ffffff' : '#7f1d1d',
+  }
 }
 
 const TREND_COLORS = ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#8b5cf6', '#06b6d4']
@@ -84,7 +86,7 @@ export function AdminErrors() {
             <section>
               <h2 className="text-lg font-semibold mb-3">错误热力图（供应商 x 类型）</h2>
               <div className="border rounded-lg bg-white overflow-auto">
-                <table className="text-sm">
+                <table className="border-collapse text-sm">
                   <thead>
                     <tr>
                       <th className="px-4 py-2 text-left text-gray-500 bg-gray-50 sticky left-0 z-10">供应商</th>
@@ -102,13 +104,13 @@ export function AdminErrors() {
                         {errorTypes.map((et) => {
                           const count = bucketMap.get(`${p}|${et}`) ?? 0
                           return (
-                            <td key={et} className="px-1 py-1 text-center">
-                              <div
-                                className={`rounded px-3 py-1.5 text-xs tabular-nums ${heatColor(count, maxCount)}`}
-                                title={`${p} / ${et}: ${count}`}
-                              >
-                                {count}
-                              </div>
+                            <td
+                              key={et}
+                              className="h-11 min-w-[72px] border border-white text-center text-sm tabular-nums"
+                              style={heatStyle(count, maxCount)}
+                              title={`${p} / ${et}: ${count}`}
+                            >
+                              {count}
                             </td>
                           )
                         })}
@@ -154,12 +156,12 @@ export function AdminErrors() {
                 错误明细
                 <span className="text-sm font-normal text-gray-400 ml-2">共 {data.recentErrors.length} 条</span>
               </h2>
-              <div className="border rounded-lg bg-white overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="border rounded-lg bg-white overflow-x-auto">
+                <table className="w-full whitespace-nowrap text-sm">
                   <thead className="bg-gray-50 text-gray-500">
                     <tr>
                       <th className="px-4 py-2 text-left">时间</th>
-                      <th className="px-4 py-2 text-left">Operation</th>
+                      <th className="px-4 py-2 text-left">来源操作</th>
                       <th className="px-4 py-2 text-left">供应商</th>
                       <th className="px-4 py-2 text-left">类型</th>
                       <th className="px-4 py-2 text-left">工具</th>
@@ -173,13 +175,13 @@ export function AdminErrors() {
                         <td className="px-4 py-2 text-xs text-gray-400 whitespace-nowrap">
                           {formatLocalTime(e.created_at)}
                         </td>
-                        <td className="px-4 py-2">
+                        <td className="px-4 py-2 max-w-[220px]">
                           <Link
                             to={`/admin/traces?op=${e.operation_id}`}
-                            className="text-xs font-mono text-blue-600 hover:underline"
-                            title={e.operation_id}
+                            className="block truncate text-xs text-blue-600 hover:underline"
+                            title={e.operation_title ?? e.operation_id}
                           >
-                            {e.operation_id.slice(0, 12)}...
+                            {e.operation_title || `${e.operation_id.slice(0, 12)}...`}
                           </Link>
                         </td>
                         <td className="px-4 py-2 text-xs">{e.provider}</td>
@@ -218,8 +220,8 @@ export function AdminErrors() {
           {data.topUnmatched.length > 0 && (
             <section>
               <h2 className="text-lg font-semibold mb-3">Top 未匹配错误</h2>
-              <div className="border rounded-lg bg-white overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="border rounded-lg bg-white overflow-x-auto">
+                <table className="w-full whitespace-nowrap text-sm">
                   <thead className="bg-gray-50 text-gray-500">
                     <tr>
                       <th className="px-4 py-2 text-left">错误消息</th>

@@ -9,7 +9,9 @@ export const patternsRoutes = new Hono()
 
 patternsRoutes.get('/', async (c) => {
   const status = c.req.query('status')
-  let query = 'SELECT * FROM patterns'
+  let query = `SELECT *,
+      (SELECT message FROM errors WHERE errors.pattern_id = patterns.pattern_id ORDER BY created_at DESC LIMIT 1) AS sample_error
+    FROM patterns`
   const params: unknown[] = []
 
   if (status) {
@@ -32,7 +34,7 @@ patternsRoutes.get('/', async (c) => {
 
 patternsRoutes.post('/', async (c) => {
   const body = await c.req.json()
-  const { name, category, provider, errorType, matchRule, userMessage, resolution } = body
+  const { name, category, provider, errorType, matchRule } = body
 
   if (!name || !category || !errorType || !matchRule) {
     return c.json({ error: 'name, category, errorType, and matchRule are required' }, 400)
@@ -41,18 +43,9 @@ patternsRoutes.post('/', async (c) => {
   const patternId = `pat_${nanoid()}`
 
   db.prepare(
-    `INSERT INTO patterns (pattern_id, name, category, provider, error_type, match_rule, user_message, resolution, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual')`,
-  ).run(
-    patternId,
-    name,
-    category,
-    provider || '*',
-    errorType,
-    JSON.stringify(matchRule),
-    userMessage || '',
-    resolution || '',
-  )
+    `INSERT INTO patterns (pattern_id, name, category, provider, error_type, match_rule, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, 'manual')`,
+  ).run(patternId, name, category, provider || '*', errorType, JSON.stringify(matchRule))
 
   invalidatePatternCache()
 
@@ -68,17 +61,7 @@ patternsRoutes.patch('/:patternId', async (c) => {
   const fields: string[] = []
   const params: unknown[] = []
 
-  for (const key of [
-    'status',
-    'user_message',
-    'resolution',
-    'name',
-    'category',
-    'provider',
-    'error_type',
-    'fix_status',
-    'fix_pr_url',
-  ] as const) {
+  for (const key of ['status', 'name', 'category', 'provider', 'error_type', 'fix_status', 'fix_pr_url'] as const) {
     if (body[key] !== undefined) {
       fields.push(`${key} = ?`)
       params.push(body[key])

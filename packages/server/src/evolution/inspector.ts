@@ -27,8 +27,6 @@ const PatternSuggestionSchema = z.object({
         messageRegex: z.string().optional(),
         errorType: z.string().optional(),
       }),
-      userMessage: z.string().describe('Friendly message to show the user when this error occurs'),
-      resolution: z.string().describe('How to fix or work around this error'),
       reasoning: z.string().describe('Why you classified it this way'),
     }),
   ),
@@ -103,9 +101,7 @@ ${bucketSummary}
    - Use messageRegex for flexible message matching (escape special regex chars)
    - Set provider to the specific provider or "*" for cross-provider patterns
 
-3. For harness_bug patterns, also add an entry to the bugs array with root cause analysis.
-
-4. Write user_message in Chinese (this is a Chinese-facing product).`
+3. For harness_bug patterns, also add an entry to the bugs array with root cause analysis (this feeds the inspection summary; the actual fix is generated later from real error samples).`
 
     const provider = (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as ProviderName
     const modelId = process.env.INSPECTOR_MODEL ?? process.env.DEFAULT_MODEL ?? 'deepseek-v4-flash'

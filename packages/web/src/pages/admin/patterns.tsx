@@ -13,8 +13,7 @@ interface PatternRow {
   provider: string
   error_type: string
   match_rule: Record<string, unknown>
-  user_message: string
-  resolution: string
+  sample_error: string | null
   hit_count: number
   status: string
   created_by: string
@@ -29,6 +28,12 @@ const CATEGORY_LABELS: Record<string, { text: string; color: string }> = {
   harness_bug: { text: 'Harness 缺陷', color: 'bg-red-100 text-red-700' },
 }
 
+function formatCreatedBy(createdBy: string): string {
+  if (createdBy === 'manual') return '手动'
+  const m = createdBy.match(/^inspector_round_(\d+)$/)
+  return m ? `巡检 #${m[1]}` : createdBy
+}
+
 const EMPTY_FORM = {
   name: '',
   category: 'user_error',
@@ -36,14 +41,13 @@ const EMPTY_FORM = {
   errorType: '',
   statusCode: '',
   messageRegex: '',
-  userMessage: '',
-  resolution: '',
 }
 
 export function AdminPatterns() {
   const [patterns, setPatterns] = useState<PatternRow[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingManual, setEditingManual] = useState(true)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [trendData, setTrendData] = useState<{ date: string; cumulative: number; new_patterns: number }[]>([])
@@ -78,6 +82,7 @@ export function AdminPatterns() {
 
   const openCreate = () => {
     setEditingId(null)
+    setEditingManual(true)
     setForm(EMPTY_FORM)
     setShowForm(true)
     openDialog()
@@ -86,6 +91,7 @@ export function AdminPatterns() {
   const openEdit = (p: PatternRow) => {
     const rule = p.match_rule || {}
     setEditingId(p.pattern_id)
+    setEditingManual(p.created_by === 'manual')
     setForm({
       name: p.name,
       category: p.category,
@@ -93,8 +99,6 @@ export function AdminPatterns() {
       errorType: p.error_type,
       statusCode: rule.statusCode != null ? String(rule.statusCode) : '',
       messageRegex: (rule.messageRegex as string) || '',
-      userMessage: p.user_message,
-      resolution: p.resolution,
     })
     setShowForm(true)
     openDialog()
@@ -104,6 +108,15 @@ export function AdminPatterns() {
     if (!form.name || !form.errorType) return
     setSaving(true)
     try {
+      // Auto-generated patterns are derived from collected errors — only the
+      // LLM-assigned category may be corrected; everything else stays locked.
+      if (editingId && !editingManual) {
+        await updatePattern(editingId, { category: form.category })
+        closeDialog()
+        await load()
+        return
+      }
+
       const matchRule: Record<string, unknown> = { errorType: form.errorType }
       if (form.statusCode) matchRule.statusCode = Number(form.statusCode)
       if (form.messageRegex) matchRule.messageRegex = form.messageRegex
@@ -116,8 +129,6 @@ export function AdminPatterns() {
           provider: form.provider,
           error_type: form.errorType,
           match_rule: matchRule,
-          user_message: form.userMessage,
-          resolution: form.resolution,
         })
       } else {
         await createPattern({
@@ -126,8 +137,6 @@ export function AdminPatterns() {
           provider: form.provider,
           errorType: form.errorType,
           matchRule,
-          userMessage: form.userMessage,
-          resolution: form.resolution,
         })
       }
       closeDialog()
@@ -144,11 +153,14 @@ export function AdminPatterns() {
   }
 
   const handleFixStatusChange = async (p: PatternRow, newFixStatus: string) => {
-    const update: Record<string, unknown> = { fix_status: newFixStatus }
-    if (newFixStatus === 'unfixed') update.fix_pr_url = null
-    await updatePattern(p.pattern_id, update)
+    await updatePattern(p.pattern_id, {
+      fix_status: newFixStatus,
+      ...(newFixStatus === 'unfixed' ? { fix_pr_url: null } : {}),
+    })
     await load()
   }
+
+  const locked = editingId !== null && !editingManual
 
   return (
     <div className="p-6">
@@ -173,8 +185,15 @@ export function AdminPatterns() {
       >
         {showForm && (
           <div className="p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">{editingId ? '编辑 Pattern' : '新建 Pattern'}</h3>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-800">{editingId ? '编辑 Pattern' : '新建 Pattern'}</h3>
+                {locked && (
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    自动生成的 Pattern 仅可修改「分类」，其余字段由错误采集生成，不可改
+                  </p>
+                )}
+              </div>
               <button onClick={closeDialog} className="rounded-full p-1 hover:bg-gray-100">
                 <X className="h-4 w-4 text-gray-400" />
               </button>
@@ -186,7 +205,8 @@ export function AdminPatterns() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="如 deepseek-rate-limit-429"
-                  className="w-full rounded border px-2 py-1.5 text-sm"
+                  disabled={locked}
+                  className={`w-full rounded border px-2 py-1.5 text-sm ${locked ? 'bg-gray-100 text-gray-400' : ''}`}
                 />
               </div>
               <div>
@@ -207,7 +227,8 @@ export function AdminPatterns() {
                   value={form.provider}
                   onChange={(e) => setForm({ ...form, provider: e.target.value })}
                   placeholder="* 表示通用"
-                  className="w-full rounded border px-2 py-1.5 text-sm"
+                  disabled={locked}
+                  className={`w-full rounded border px-2 py-1.5 text-sm ${locked ? 'bg-gray-100 text-gray-400' : ''}`}
                 />
               </div>
               <div>
@@ -216,7 +237,8 @@ export function AdminPatterns() {
                   value={form.errorType}
                   onChange={(e) => setForm({ ...form, errorType: e.target.value })}
                   placeholder="如 rate_limit"
-                  className="w-full rounded border px-2 py-1.5 text-sm"
+                  disabled={locked}
+                  className={`w-full rounded border px-2 py-1.5 text-sm ${locked ? 'bg-gray-100 text-gray-400' : ''}`}
                 />
               </div>
               <div>
@@ -225,7 +247,8 @@ export function AdminPatterns() {
                   value={form.statusCode}
                   onChange={(e) => setForm({ ...form, statusCode: e.target.value })}
                   placeholder="如 429"
-                  className="w-full rounded border px-2 py-1.5 text-sm"
+                  disabled={locked}
+                  className={`w-full rounded border px-2 py-1.5 text-sm ${locked ? 'bg-gray-100 text-gray-400' : ''}`}
                 />
               </div>
               <div>
@@ -234,27 +257,10 @@ export function AdminPatterns() {
                   value={form.messageRegex}
                   onChange={(e) => setForm({ ...form, messageRegex: e.target.value })}
                   placeholder="如 rate limit"
-                  className="w-full rounded border px-2 py-1.5 text-sm"
+                  disabled={locked}
+                  className={`w-full rounded border px-2 py-1.5 text-sm ${locked ? 'bg-gray-100 text-gray-400' : ''}`}
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">用户提示语</label>
-              <input
-                value={form.userMessage}
-                onChange={(e) => setForm({ ...form, userMessage: e.target.value })}
-                placeholder="显示给用户的友好错误信息"
-                className="w-full rounded border px-2 py-1.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">修复方式</label>
-              <input
-                value={form.resolution}
-                onChange={(e) => setForm({ ...form, resolution: e.target.value })}
-                placeholder="描述如何修复此类错误"
-                className="w-full rounded border px-2 py-1.5 text-sm"
-              />
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={closeDialog} className="rounded border px-4 py-1.5 text-sm hover:bg-gray-50">
@@ -308,20 +314,21 @@ export function AdminPatterns() {
       {patterns.length === 0 ? (
         <p className="text-gray-400">暂未发现任何 Pattern。请先运行一次巡检或手动添加。</p>
       ) : (
-        <div className="border rounded-lg bg-white overflow-hidden">
+        <div className="border rounded-lg bg-white overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                <th className="px-4 py-2 text-left">名称</th>
-                <th className="px-4 py-2 text-left">分类</th>
-                <th className="px-4 py-2 text-left">供应商</th>
-                <th className="px-4 py-2 text-left">错误类型</th>
-                <th className="px-4 py-2 text-right">匹配次数</th>
-                <th className="px-4 py-2 text-left">状态</th>
-                <th className="px-4 py-2 text-left">修复</th>
-                <th className="px-4 py-2 text-left">创建方式</th>
-                <th className="px-4 py-2 text-left">创建时间</th>
-                <th className="px-4 py-2 text-left">操作</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">名称</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">分类</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">供应商</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">错误类型</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">错误样本</th>
+                <th className="px-4 py-2 text-right whitespace-nowrap">匹配次数</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">状态</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">修复</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">创建方式</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">创建时间</th>
+                <th className="px-4 py-2 text-left whitespace-nowrap">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -329,18 +336,27 @@ export function AdminPatterns() {
                 const cat = CATEGORY_LABELS[p.category] ?? { text: p.category, color: 'bg-gray-100' }
                 return (
                   <tr key={p.pattern_id} className="border-t hover:bg-gray-50">
-                    <td className="px-4 py-2 font-medium" title={p.user_message}>
-                      {p.name}
-                    </td>
+                    <td className="px-4 py-2 font-medium">{p.name}</td>
                     <td className="px-4 py-2">
-                      <span className={`text-xs rounded-full px-2 py-0.5 ${cat.color}`}>{cat.text}</span>
+                      <span className={`inline-block whitespace-nowrap text-xs rounded-full px-2 py-0.5 ${cat.color}`}>
+                        {cat.text}
+                      </span>
                     </td>
-                    <td className="px-4 py-2">{p.provider}</td>
-                    <td className="px-4 py-2 text-xs">{p.error_type}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">{p.provider}</td>
+                    <td className="px-4 py-2 text-xs whitespace-nowrap">{p.error_type}</td>
+                    <td className="px-4 py-2">
+                      {p.sample_error ? (
+                        <div className="max-w-[260px] truncate text-xs text-gray-600" title={p.sample_error}>
+                          {p.sample_error}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-right font-semibold">{p.hit_count}</td>
                     <td className="px-4 py-2">
                       <span
-                        className={`text-xs rounded-full px-2 py-0.5 ${p.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
+                        className={`inline-block whitespace-nowrap text-xs rounded-full px-2 py-0.5 ${p.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
                       >
                         {p.status === 'active' ? '活跃' : p.status === 'resolved' ? '已解决' : p.status}
                       </span>
@@ -368,6 +384,7 @@ export function AdminPatterns() {
                               <option value="branch_created">已创建分支</option>
                               <option value="pr_created">PR 已创建</option>
                               <option value="merged">已合并</option>
+                              <option value="ignore">忽略</option>
                             </select>
                             <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 opacity-50" />
                           </div>
@@ -386,8 +403,12 @@ export function AdminPatterns() {
                         <span className="text-xs text-gray-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-xs text-gray-500">{p.created_by}</td>
-                    <td className="px-4 py-2 text-xs text-gray-400">{formatLocalTime(p.first_seen)}</td>
+                    <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap" title={p.created_by}>
+                      {formatCreatedBy(p.created_by)}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-gray-400 whitespace-nowrap">
+                      {formatLocalTime(p.first_seen)}
+                    </td>
                     <td className="px-4 py-2">
                       <div className="flex gap-1">
                         <button
@@ -399,13 +420,13 @@ export function AdminPatterns() {
                         </button>
                         <button
                           onClick={() => handleToggleStatus(p)}
-                          className={`text-xs rounded px-2 py-1 ${
+                          className={`whitespace-nowrap text-xs rounded px-2 py-1 ${
                             p.status === 'active'
                               ? 'text-gray-600 hover:bg-gray-100'
                               : 'text-green-600 hover:bg-green-50'
                           }`}
                         >
-                          {p.status === 'active' ? '停用' : '启用'}
+                          {p.status === 'active' ? '解决' : '激活'}
                         </button>
                       </div>
                     </td>

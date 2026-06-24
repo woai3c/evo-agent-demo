@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { fetchTraceDetail, fetchTraces } from '../../lib/admin-api'
@@ -159,55 +159,61 @@ export function AdminTraces() {
               </tr>
             </thead>
             <tbody>
-              {operations.map((op) => (
-                <>
-                  <tr
-                    key={op.operation_id}
-                    className="border-t hover:bg-gray-50 cursor-pointer"
-                    onClick={() => toggleExpand(op.operation_id)}
-                  >
-                    <td className="px-4 py-2">
-                      {expandedId === op.operation_id ? (
-                        <ChevronDown className="h-4 w-4 text-gray-400" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-xs max-w-[200px] truncate" title={op.operation_id}>
-                      {op.conversation_title || op.operation_id.slice(0, 16) + '...'}
-                    </td>
-                    <td className="px-4 py-2">{op.user_id}</td>
-                    <td className="px-4 py-2 text-xs">{op.model}</td>
-                    <td className="px-4 py-2">
-                      <span className={`text-xs rounded-full px-2 py-0.5 ${STATUS_COLORS[op.status] ?? 'bg-gray-100'}`}>
-                        {op.status === 'success' ? '成功' : op.status === 'error' ? '失败' : op.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-right">{op.total_steps}</td>
-                    <td className="px-4 py-2 text-right">{(op.total_duration / 1000).toFixed(1)}s</td>
-                    <td
-                      className="px-4 py-2 text-right"
-                      title={`输入: ${op.total_tokens.input} | 输出: ${op.total_tokens.output} | 缓存: ${op.total_tokens.cached ?? 0}`}
+              {operations.map((op) => {
+                const tokIn = op.total_tokens?.input ?? 0
+                const tokOut = op.total_tokens?.output ?? 0
+                const tokCached = op.total_tokens?.cached ?? 0
+                return (
+                  <Fragment key={op.operation_id}>
+                    <tr
+                      className="border-t hover:bg-gray-50 cursor-pointer"
+                      onClick={() => toggleExpand(op.operation_id)}
                     >
-                      {((op.total_tokens.input + op.total_tokens.output) / 1000).toFixed(1)}k
-                      {(op.total_tokens.cached ?? 0) > 0 && op.total_tokens.input > 0 && (
-                        <span className="ml-1 text-[10px] text-green-600">
-                          {Math.round(((op.total_tokens.cached ?? 0) / op.total_tokens.input) * 100)}%
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right">¥{op.cost.toFixed(4)}</td>
-                    <td className="px-4 py-2 text-xs text-gray-400">{formatLocalTime(op.created_at)}</td>
-                  </tr>
-                  {expandedId === op.operation_id && (
-                    <tr key={`${op.operation_id}-detail`}>
-                      <td colSpan={10} className="bg-gray-50 px-8 py-4">
-                        <StepTimeline steps={steps} />
+                      <td className="px-4 py-2">
+                        {expandedId === op.operation_id ? (
+                          <ChevronDown className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                        )}
                       </td>
+                      <td className="px-4 py-2 text-xs max-w-[200px] truncate" title={op.operation_id}>
+                        {op.conversation_title || op.operation_id.slice(0, 16) + '...'}
+                      </td>
+                      <td className="px-4 py-2">{op.user_id}</td>
+                      <td className="px-4 py-2 text-xs">{op.model}</td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={`text-xs rounded-full px-2 py-0.5 ${STATUS_COLORS[op.status] ?? 'bg-gray-100'}`}
+                        >
+                          {op.status === 'success' ? '成功' : op.status === 'error' ? '失败' : op.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right">{op.total_steps}</td>
+                      <td className="px-4 py-2 text-right">{(op.total_duration / 1000).toFixed(1)}s</td>
+                      <td
+                        className="px-4 py-2 text-right"
+                        title={`输入: ${tokIn} | 输出: ${tokOut} | 缓存: ${tokCached}`}
+                      >
+                        {((tokIn + tokOut) / 1000).toFixed(1)}k
+                        {tokCached > 0 && tokIn > 0 && (
+                          <span className="ml-1 text-[10px] text-green-600">
+                            {Math.round((tokCached / tokIn) * 100)}%
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">¥{op.cost.toFixed(4)}</td>
+                      <td className="px-4 py-2 text-xs text-gray-400">{formatLocalTime(op.created_at)}</td>
                     </tr>
-                  )}
-                </>
-              ))}
+                    {expandedId === op.operation_id && (
+                      <tr>
+                        <td colSpan={10} className="bg-gray-50 px-8 py-4">
+                          <StepTimeline steps={steps} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>

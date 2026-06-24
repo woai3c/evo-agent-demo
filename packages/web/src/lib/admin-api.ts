@@ -122,8 +122,6 @@ export async function createPattern(body: {
   provider: string
   errorType: string
   matchRule: Record<string, unknown>
-  userMessage: string
-  resolution: string
 }) {
   const res = await fetch(`${BASE}/patterns`, {
     method: 'POST',
@@ -138,12 +136,12 @@ export async function updatePattern(
   body: {
     status?: string
     name?: string
-    user_message?: string
-    resolution?: string
     category?: string
     provider?: string
     error_type?: string
     match_rule?: Record<string, unknown>
+    fix_status?: string
+    fix_pr_url?: string | null
   },
 ) {
   const res = await fetch(`${BASE}/patterns/${patternId}`, {

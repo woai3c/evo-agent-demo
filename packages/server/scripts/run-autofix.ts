@@ -12,9 +12,7 @@ import { runAutoFix } from '../src/evolution/auto-pr.js'
 config({ path: resolve(import.meta.dirname, '../../../.env') })
 
 const unfixed = db
-  .prepare(
-    "SELECT COUNT(*) as c FROM patterns WHERE category = 'harness_bug' AND fix_status = 'unfixed' AND resolution != ''",
-  )
+  .prepare("SELECT COUNT(*) as c FROM patterns WHERE category = 'harness_bug' AND fix_status = 'unfixed'")
   .get() as { c: number }
 
 console.log(`Found ${unfixed.c} unfixed harness bugs. Running auto-fix...`)

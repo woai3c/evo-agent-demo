@@ -109,9 +109,12 @@ dashboardRoutes.get('/errors', async (c) => {
     .prepare(
       `SELECT e.error_id, e.operation_id, e.provider, e.error_type, e.status_code,
               e.message, e.tool_name, e.pattern_id, e.created_at,
-              p.name as pattern_name, p.category as pattern_category
+              p.name as pattern_name, p.category as pattern_category,
+              c.title as operation_title
        FROM errors e
        LEFT JOIN patterns p ON e.pattern_id = p.pattern_id
+       LEFT JOIN operations o ON e.operation_id = o.operation_id
+       LEFT JOIN conversations c ON o.conversation_id = c.conversation_id
        ORDER BY e.created_at DESC LIMIT 100`,
     )
     .all()

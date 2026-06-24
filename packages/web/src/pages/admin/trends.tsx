@@ -3,6 +3,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { useEffect, useState } from 'react'
 
 import { fetchTrends } from '../../lib/admin-api'
+import { formatLocalTime } from '../../lib/format'
 
 interface TrendData {
   dailyOperations: { date: string; total: number; success: number }[]
@@ -144,8 +145,8 @@ export function AdminTrends() {
         {hasSnapshots && (
           <section className="border rounded-lg bg-white p-4">
             <h2 className="text-sm font-semibold text-gray-500 mb-4">巡检 Before / After 对比</h2>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full whitespace-nowrap text-sm">
                 <thead className="bg-gray-50 text-gray-500">
                   <tr>
                     <th className="px-3 py-2 text-left">轮次</th>
@@ -162,7 +163,7 @@ export function AdminTrends() {
                   {data.inspectionSnapshots.map((s) => (
                     <tr key={s.round} className="border-t">
                       <td className="px-3 py-2 font-bold text-blue-600">#{s.round}</td>
-                      <td className="px-3 py-2 text-xs text-gray-500">{s.started_at}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{formatLocalTime(s.started_at)}</td>
                       <td className="px-3 py-2 text-right">{s.traces_analyzed}</td>
                       <td className="px-3 py-2 text-right text-green-600">+{s.new_patterns}</td>
                       <td className="px-3 py-2 text-center text-xs">
