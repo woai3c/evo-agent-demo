@@ -6,9 +6,9 @@ import { z } from 'zod'
 
 export const codeRunnerTool = tool({
   description:
-    'Execute a JavaScript code snippet in a restricted VM context (node:vm) and return stdout output. ' +
+    'Execute a JavaScript code snippet in a restricted VM context (node:vm) and return console output plus the last expression value. ' +
     'Useful for calculations, data transformations, formatting, JSON processing, and quick prototyping. ' +
-    'Available globals: console, Math, Date, JSON, Array, Object, String, Number, Map, Set, Promise, RegExp. ' +
+    'Standard JS built-ins are available (console, Math, JSON, Date, Array, Object, String, Number, Boolean, Map, Set, Promise, RegExp, parseInt, parseFloat, etc.). ' +
     'Use console.log() to produce output. No require/import, no filesystem, no network access.',
   parameters: z.object({
     code: z.string().describe('JavaScript code to execute'),
