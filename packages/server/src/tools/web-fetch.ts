@@ -34,34 +34,58 @@ export const webFetchTool = tool({
       return { error: 'Fetching private/internal URLs is not allowed', url }
     }
 
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Evo-Agent/1.0' },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(15_000),
-      })
+    // Check cache
+    const cached = cache.get(url)
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data
+    }
 
-      if (!res.ok) {
-        return { error: `HTTP ${res.status} ${res.statusText}`, url }
+    const maxRetries = 3
+    const baseDelay = 1000
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'Evo-Agent/1.0' },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(15_000),
+        })
+
+        if (!res.ok && attempt < maxRetries) {
+          const delay = baseDelay * Math.pow(2, attempt)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+
+        if (!res.ok) {
+          return { error: `HTTP ${res.status} ${res.statusText}`, url }
+        }
+
+        const contentType = res.headers.get('content-type') ?? ''
+        const raw = await res.text()
+        const text = contentType.includes('text/html') ? stripHtml(raw) : raw
+
+        const maxLength = 20_000
+        const truncated = text.length > maxLength
+        const result = {
+          url,
+          contentLength: text.length,
+          truncated,
+          text: truncated ? text.slice(0, maxLength) + '\n\n... [content truncated]' : text,
+        }
+
+        // Cache the result
+        cache.set(url, { data: result, timestamp: Date.now() })
+        return result
+      } catch (err) {
+        if (attempt < maxRetries) {
+          const delay = baseDelay * Math.pow(2, attempt)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        return { error: `Failed to fetch URL: ${message}`, url }
       }
-
-      const contentType = res.headers.get('content-type') ?? ''
-      const raw = await res.text()
-      const text = contentType.includes('text/html') ? stripHtml(raw) : raw
-
-      const maxLength = 20_000
-      const truncated = text.length > maxLength
-      return {
-        url,
-        contentLength: text.length,
-        truncated,
-        text: truncated ? text.slice(0, maxLength) + '\n\n... [content truncated]' : text,
-      }
-    } catch (err) {
-      // Network failure / DNS / timeout (AbortSignal) would otherwise throw and
-      // kill the agent loop; return an error result so the model can recover.
-      const message = err instanceof Error ? err.message : String(err)
-      return { error: `Failed to fetch URL: ${message}`, url }
     }
   },
 })
