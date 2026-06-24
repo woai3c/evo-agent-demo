@@ -27,41 +27,50 @@ export const webFetchTool = tool({
     `Content is capped at 20,000 characters; longer pages are truncated.`,
   parameters: z.object({
     url: z.string().url().describe('The URL to fetch'),
+    timeout: z.number().positive().optional().describe('Timeout in seconds (default 15)'),
   }),
-  execute: async ({ url }) => {
+  execute: async ({ url, timeout = 15 }) => {
     const parsed = new URL(url)
     if (PRIVATE_IP_RE.test(parsed.hostname)) {
       return { error: 'Fetching private/internal URLs is not allowed', url }
     }
 
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Evo-Agent/1.0' },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(15_000),
-      })
+    const maxRetries = 3
+    let lastError: string | undefined
 
-      if (!res.ok) {
-        return { error: `HTTP ${res.status} ${res.statusText}`, url }
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'Evo-Agent/1.0' },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(timeout * 1000),
+        })
+
+        if (!res.ok) {
+          return { error: `HTTP ${res.status} ${res.statusText}`, url }
+        }
+
+        const contentType = res.headers.get('content-type') ?? ''
+        const raw = await res.text()
+        const text = contentType.includes('text/html') ? stripHtml(raw) : raw
+
+        const maxLength = 20_000
+        const truncated = text.length > maxLength
+        return {
+          url,
+          contentLength: text.length,
+          truncated,
+          text: truncated ? text.slice(0, maxLength) + '\n\n... [content truncated]' : text,
+        }
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err)
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt - 1) * 1000
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
       }
-
-      const contentType = res.headers.get('content-type') ?? ''
-      const raw = await res.text()
-      const text = contentType.includes('text/html') ? stripHtml(raw) : raw
-
-      const maxLength = 20_000
-      const truncated = text.length > maxLength
-      return {
-        url,
-        contentLength: text.length,
-        truncated,
-        text: truncated ? text.slice(0, maxLength) + '\n\n... [content truncated]' : text,
-      }
-    } catch (err) {
-      // Network failure / DNS / timeout (AbortSignal) would otherwise throw and
-      // kill the agent loop; return an error result so the model can recover.
-      const message = err instanceof Error ? err.message : String(err)
-      return { error: `Failed to fetch URL: ${message}`, url }
     }
+
+    return { error: `Failed to fetch URL after ${maxRetries} attempts: ${lastError}`, url }
   },
 })
