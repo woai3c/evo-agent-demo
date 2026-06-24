@@ -10,7 +10,16 @@ import { dbPath } from '../db/index.js'
 // best-effort UX only; the real enforcement is this dedicated read-only
 // connection, so a bypassed guard (leading comment / CTE / RETURNING clause)
 // still cannot mutate the database.
-const readonlyDb = new Database(dbPath, { readonly: true })
+let readonlyDb: Database
+const MAX_RETRIES = 3
+for (let i = 0; i < MAX_RETRIES; i++) {
+  try {
+    readonlyDb = new Database(dbPath, { readonly: true })
+    break
+  } catch (e) {
+    if (i === MAX_RETRIES - 1) throw e
+  }
+}
 
 const FORBIDDEN_RE = /^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|REINDEX|VACUUM)\b/i
 const MAX_ROWS = 100
@@ -40,6 +49,11 @@ export const dbQueryTool = tool({
 
     if (sql.includes(';') && sql.replace(/;[\s]*$/, '').includes(';')) {
       return { error: 'Multiple statements are not allowed' }
+    }
+
+    const trimmedSql = sql.trim()
+    if (!trimmedSql || !trimmedSql.toUpperCase().startsWith('SELECT')) {
+      return { error: 'Only SELECT queries are allowed' }
     }
 
     try {
