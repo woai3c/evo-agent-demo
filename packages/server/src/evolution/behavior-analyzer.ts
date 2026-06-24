@@ -291,6 +291,7 @@ ${operationLines}
         suggestion: '',
         suggestionSeverity: 'none' as 'none' | 'critical' | 'suggestion',
         fixStatus: 'none' as string,
+        fixPrUrl: null as string | null,
         sampleOperations: ops.slice(0, 5).map((o) => o.operationId),
         firstSeen: timestamps[0] ?? new Date().toISOString(),
         lastSeen: timestamps[timestamps.length - 1] ?? new Date().toISOString(),
@@ -348,13 +349,37 @@ ${unhealthyDesc}
     }
   }
 
+  // Carry fix progress across re-clustering. Behaviors are wiped + recreated every
+  // inspection, so without this a behavior whose fix PR already exists comes back as
+  // unfixed and gets re-fixed (duplicate PR). Match by tool_sequence — more stable
+  // than the LLM-generated name. Best-effort: if the LLM phrases the sequence
+  // differently next round, that one can still slip through.
+  const FIXED_STATUSES = new Set(['branch_created', 'pr_created', 'merged'])
+  const priorFixes = new Map<string, { fixStatus: string; fixPrUrl: string | null }>()
+  for (const r of db.prepare('SELECT tool_sequence, fix_status, fix_pr_url FROM behaviors').all() as {
+    tool_sequence: string
+    fix_status: string
+    fix_pr_url: string | null
+  }[]) {
+    if (FIXED_STATUSES.has(r.fix_status)) {
+      priorFixes.set(r.tool_sequence, { fixStatus: r.fix_status, fixPrUrl: r.fix_pr_url })
+    }
+  }
+  for (const b of behaviorRows) {
+    const prior = priorFixes.get(b.toolSequence)
+    if (prior) {
+      b.fixStatus = prior.fixStatus
+      b.fixPrUrl = prior.fixPrUrl
+    }
+  }
+
   // Write to DB (clear old behaviors and insert new)
   const insertStmt = db.prepare(`
     INSERT INTO behaviors (behavior_id, name, description, tool_sequence, operation_count,
       success_rate, avg_duration, avg_steps, avg_tokens, avg_cost, tool_error_rate,
-      health_score, health_flags, suggestion, suggestion_severity, fix_status,
+      health_score, health_flags, suggestion, suggestion_severity, fix_status, fix_pr_url,
       sample_operations, first_seen, last_seen, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const writeAll = db.transaction(() => {
@@ -377,6 +402,7 @@ ${unhealthyDesc}
         b.suggestion,
         b.suggestionSeverity,
         b.fixStatus,
+        b.fixPrUrl,
         JSON.stringify(b.sampleOperations),
         b.firstSeen,
         b.lastSeen,
