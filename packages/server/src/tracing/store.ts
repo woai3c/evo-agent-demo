@@ -41,7 +41,7 @@ export interface InsertErrorParams {
 
 const insertOperationStmt = db.prepare(`
   INSERT INTO operations (operation_id, conversation_id, user_id, model, provider, status)
-  VALUES (?, ?, ?, ?, ?, 'error')
+  VALUES (?, ?, ?, ?, ?, 'running')
 `)
 
 const insertStepStmt = db.prepare(`

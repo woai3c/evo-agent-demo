@@ -39,6 +39,7 @@ interface StepRow {
 const STATUS_COLORS: Record<string, string> = {
   success: 'bg-green-100 text-green-700',
   error: 'bg-red-100 text-red-700',
+  running: 'bg-blue-100 text-blue-700 animate-pulse',
   interrupted: 'bg-yellow-100 text-yellow-700',
 }
 
@@ -185,7 +186,15 @@ export function AdminTraces() {
                         <span
                           className={`text-xs rounded-full px-2 py-0.5 ${STATUS_COLORS[op.status] ?? 'bg-gray-100'}`}
                         >
-                          {op.status === 'success' ? '成功' : op.status === 'error' ? '失败' : op.status}
+                          {op.status === 'success'
+                            ? '成功'
+                            : op.status === 'error'
+                              ? '失败'
+                              : op.status === 'running'
+                                ? '处理中'
+                                : op.status === 'interrupted'
+                                  ? '已中断'
+                                  : op.status}
                         </span>
                       </td>
                       <td className="px-4 py-2 text-right">{op.total_steps}</td>
