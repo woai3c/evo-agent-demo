@@ -42,21 +42,30 @@ export const dbQueryTool = tool({
       return { error: 'Multiple statements are not allowed' }
     }
 
-    try {
-      const rows = readonlyDb.prepare(sql).all() as Record<string, unknown>[]
-      const truncated = rows.length > MAX_ROWS
-      const limited = truncated ? rows.slice(0, MAX_ROWS) : rows
-      const columns = limited.length > 0 ? Object.keys(limited[0]) : []
+    const MAX_RETRIES = 3
+    const RETRY_DELAY_MS = 100
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const rows = readonlyDb.prepare(sql).all() as Record<string, unknown>[]
+        const truncated = rows.length > MAX_ROWS
+        const limited = truncated ? rows.slice(0, MAX_ROWS) : rows
+        const columns = limited.length > 0 ? Object.keys(limited[0]) : []
 
-      return {
-        columns,
-        rowCount: rows.length,
-        truncated,
-        rows: limited,
+        return {
+          columns,
+          rowCount: rows.length,
+          truncated,
+          rows: limited,
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (attempt < MAX_RETRIES && (message.includes('SQLITE_BUSY') || message.includes('database is locked'))) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt))
+          continue
+        }
+        return { error: `SQL error: ${message}` }
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return { error: `SQL error: ${message}` }
     }
+    return { error: 'Unexpected error after retries' }
   },
 })

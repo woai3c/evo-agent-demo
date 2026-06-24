@@ -27,6 +27,10 @@ export const readFileTool = tool({
       return { error: `Unsupported file type: ${ext}. Supported: ${[...ALLOWED_EXTENSIONS].join(', ')}` }
     }
 
+    if (!existsSync(resolved)) {
+      return { error: `File not found: ${fileId}` }
+    }
+
     try {
       const content = readFileSync(resolved, 'utf-8')
       const truncated = content.length > MAX_SIZE
