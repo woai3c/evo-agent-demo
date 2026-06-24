@@ -2,7 +2,7 @@ import { Check, Copy, GitPullRequest, Loader2, Play, ScrollText, Wrench } from '
 
 import { useEffect, useRef, useState } from 'react'
 
-import { fetchInspections, triggerAutoFix, triggerInspection } from '../../lib/admin-api'
+import { fetchAutofixRuns, fetchInspections, triggerAutoFix, triggerInspection } from '../../lib/admin-api'
 import { formatLocalTime } from '../../lib/format'
 
 interface AutoFixResultItem {
@@ -27,6 +27,17 @@ interface InspectionRow {
   cost: number
   summary: string
   details: { newPatterns: unknown[]; bugs: { title: string; severity: string; description: string }[] } | null
+}
+
+interface AutofixRunRow {
+  run_id: string
+  started_at: string
+  finished_at: string | null
+  total_targets: number
+  pr_created: number
+  branch_created: number
+  failed: number
+  results: AutoFixResultItem[]
 }
 
 // Module-level state survives component remount
@@ -90,9 +101,15 @@ export function AdminInspections() {
   const [logs, setLogs] = useState<string[]>(() => [...cachedLogs])
   const [fixResults, setFixResults] = useState<AutoFixResultItem[] | null>(() => cachedFixResults)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [tab, setTab] = useState<'inspect' | 'autofix'>('inspect')
+  const [autofixRuns, setAutofixRuns] = useState<AutofixRunRow[]>([])
   const mountedRef = useRef(true)
 
   const load = () => fetchInspections().then((data) => setInspections(data.inspections))
+  const loadAutofixRuns = () =>
+    fetchAutofixRuns()
+      .then((data) => setAutofixRuns(data?.runs ?? []))
+      .catch(() => setAutofixRuns([]))
 
   const appendLog = (msg: string) => {
     cachedLogs.push(msg)
@@ -102,6 +119,7 @@ export function AdminInspections() {
   useEffect(() => {
     mountedRef.current = true
     load()
+    loadAutofixRuns()
 
     if (activePromise) {
       activePromise.then(() => {
@@ -109,6 +127,7 @@ export function AdminInspections() {
         setRunning(false)
         setFixing(false)
         load()
+        loadAutofixRuns()
       })
     }
 
@@ -169,7 +188,11 @@ export function AdminInspections() {
     } finally {
       activePromise = null
       activeType = null
-      if (mountedRef.current) setFixing(false)
+      if (mountedRef.current) {
+        setFixing(false)
+        setTab('autofix')
+        loadAutofixRuns()
+      }
     }
   }
 
@@ -181,11 +204,11 @@ export function AdminInspections() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">巡检记录</h1>
-          {inspections.length > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
-              共 {inspections.length} 轮，累计成本 ¥{totalCost.toFixed(4)}
-            </p>
-          )}
+          <p className="text-sm text-gray-500 mt-1">
+            {tab === 'inspect'
+              ? `共 ${inspections.length} 轮巡检，累计成本 ¥${totalCost.toFixed(4)}`
+              : `共 ${autofixRuns.length} 次自动修复`}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -266,50 +289,130 @@ export function AdminInspections() {
         </div>
       )}
 
-      {/* Inspection history */}
-      {inspections.length === 0 ? (
-        <p className="text-gray-400">暂未运行过巡检。点击上方按钮开始第一轮巡检。</p>
+      {/* Tabs: Inspection A history vs Auto-fix (Inspection B) history */}
+      <div className="flex gap-1 border-b mb-4">
+        <button
+          onClick={() => setTab('inspect')}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${tab === 'inspect' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          巡检 A 记录（{inspections.length}）
+        </button>
+        <button
+          onClick={() => setTab('autofix')}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${tab === 'autofix' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          自动修复记录（{autofixRuns.length}）
+        </button>
+      </div>
+
+      {tab === 'inspect' ? (
+        inspections.length === 0 ? (
+          <p className="text-gray-400">暂未运行过巡检。点击上方按钮开始第一轮巡检。</p>
+        ) : (
+          <div className="space-y-3">
+            {inspections.map((insp) => (
+              <div key={insp.inspection_id} className="border rounded-lg bg-white">
+                <button
+                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
+                  onClick={() => setExpandedId(expandedId === insp.inspection_id ? null : insp.inspection_id)}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-lg font-bold text-blue-600">#{insp.round}</span>
+                    <div>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span>分析 {insp.traces_analyzed} 条错误</span>
+                        <span className="text-green-600 font-medium">+{insp.new_patterns} Pattern</span>
+                        {insp.harness_bugs > 0 && (
+                          <span className="text-red-600 font-medium">{insp.harness_bugs} 个缺陷</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(insp.started_at)}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400">¥{insp.cost.toFixed(4)}</span>
+                </button>
+
+                {expandedId === insp.inspection_id && (
+                  <div className="border-t px-4 py-3 bg-gray-50">
+                    <p className="text-sm mb-3">{insp.summary}</p>
+                    {insp.details?.bugs && insp.details.bugs.length > 0 && (
+                      <div className="mt-2">
+                        <h3 className="text-sm font-semibold text-red-600 mb-1">Harness 缺陷</h3>
+                        {insp.details.bugs.map((bug, i) => (
+                          <div key={i} className="text-xs bg-red-50 rounded p-2 mb-1">
+                            <span
+                              className={`rounded px-1 py-0.5 mr-2 ${bug.severity === 'high' ? 'bg-red-200' : bug.severity === 'medium' ? 'bg-yellow-200' : 'bg-gray-200'}`}
+                            >
+                              {bug.severity}
+                            </span>
+                            <strong>{bug.title}</strong>: {bug.description}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      ) : autofixRuns.length === 0 ? (
+        <p className="text-gray-400">暂未运行过自动修复。点击上方“巡检 B：自动修复”开始。</p>
       ) : (
         <div className="space-y-3">
-          {inspections.map((insp) => (
-            <div key={insp.inspection_id} className="border rounded-lg bg-white">
+          {autofixRuns.map((run) => (
+            <div key={run.run_id} className="border rounded-lg bg-white">
               <button
                 className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
-                onClick={() => setExpandedId(expandedId === insp.inspection_id ? null : insp.inspection_id)}
+                onClick={() => setExpandedId(expandedId === run.run_id ? null : run.run_id)}
               >
                 <div className="flex items-center gap-4">
-                  <span className="text-lg font-bold text-blue-600">#{insp.round}</span>
+                  <GitPullRequest className="h-5 w-5 text-emerald-600" />
                   <div>
                     <div className="flex items-center gap-3 text-sm">
-                      <span>分析 {insp.traces_analyzed} 条错误</span>
-                      <span className="text-green-600 font-medium">+{insp.new_patterns} Pattern</span>
-                      {insp.harness_bugs > 0 && (
-                        <span className="text-red-600 font-medium">{insp.harness_bugs} 个缺陷</span>
+                      <span>处理 {run.total_targets} 个目标</span>
+                      {run.pr_created > 0 && <span className="font-medium text-green-600">{run.pr_created} PR</span>}
+                      {run.branch_created > 0 && (
+                        <span className="font-medium text-yellow-600">{run.branch_created} 分支</span>
                       )}
+                      {run.failed > 0 && <span className="font-medium text-red-600">{run.failed} 失败</span>}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(insp.started_at)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(run.started_at)}</p>
                   </div>
                 </div>
-                <span className="text-xs text-gray-400">¥{insp.cost.toFixed(4)}</span>
               </button>
 
-              {expandedId === insp.inspection_id && (
-                <div className="border-t px-4 py-3 bg-gray-50">
-                  <p className="text-sm mb-3">{insp.summary}</p>
-                  {insp.details?.bugs && insp.details.bugs.length > 0 && (
-                    <div className="mt-2">
-                      <h3 className="text-sm font-semibold text-red-600 mb-1">Harness 缺陷</h3>
-                      {insp.details.bugs.map((bug, i) => (
-                        <div key={i} className="text-xs bg-red-50 rounded p-2 mb-1">
+              {expandedId === run.run_id && (
+                <div className="border-t px-4 py-3 bg-gray-50 space-y-1.5">
+                  {run.results.length === 0 ? (
+                    <p className="text-sm text-gray-400">无目标</p>
+                  ) : (
+                    run.results.map((r) => (
+                      <div key={r.sourceId} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
                           <span
-                            className={`rounded px-1 py-0.5 mr-2 ${bug.severity === 'high' ? 'bg-red-200' : bug.severity === 'medium' ? 'bg-yellow-200' : 'bg-gray-200'}`}
+                            className={`text-[10px] rounded px-1.5 py-0.5 ${r.source === 'pattern' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}
                           >
-                            {bug.severity}
+                            {r.source === 'pattern' ? 'Bug 修复' : '行为优化'}
                           </span>
-                          <strong>{bug.title}</strong>: {bug.description}
+                          <span>{r.sourceName}</span>
                         </div>
-                      ))}
-                    </div>
+                        {r.prUrl ? (
+                          <a
+                            href={r.prUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            PR
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            {r.status === 'failed' ? '失败' : r.status === 'branch_created' ? '仅分支' : r.status}
+                          </span>
+                        )}
+                      </div>
+                    ))
                   )}
                 </div>
               )}

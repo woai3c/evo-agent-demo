@@ -19,6 +19,17 @@ inspectionsRoutes.get('/', async (c) => {
   return c.json({ inspections })
 })
 
+inspectionsRoutes.get('/autofix-runs', async (c) => {
+  const rows = db.prepare('SELECT * FROM autofix_runs ORDER BY started_at DESC').all() as Record<string, unknown>[]
+
+  const runs = rows.map((r) => ({
+    ...r,
+    results: r.results ? JSON.parse(r.results as string) : [],
+  }))
+
+  return c.json({ runs })
+})
+
 inspectionsRoutes.post('/run', async (c) => {
   return streamSSE(c, async (stream) => {
     try {

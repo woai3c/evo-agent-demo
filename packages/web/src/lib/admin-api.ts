@@ -54,6 +54,11 @@ export async function fetchInspections() {
   return res.json()
 }
 
+export async function fetchAutofixRuns() {
+  const res = await fetch(`${BASE}/inspections/autofix-runs`)
+  return res.json()
+}
+
 export interface SSECallbacks {
   onLog?: (message: string) => void
   onDone?: (data: unknown) => void

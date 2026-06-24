@@ -126,6 +126,17 @@ export function initDatabase(dbPath: string): Database.Database {
       PRIMARY KEY (tool_name, wrong_param, correct_param)
     );
 
+    CREATE TABLE IF NOT EXISTS autofix_runs (
+      run_id         TEXT PRIMARY KEY,
+      started_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at    TEXT,
+      total_targets  INTEGER NOT NULL DEFAULT 0,
+      pr_created     INTEGER NOT NULL DEFAULT 0,
+      branch_created INTEGER NOT NULL DEFAULT 0,
+      failed         INTEGER NOT NULL DEFAULT 0,
+      results        TEXT NOT NULL DEFAULT '[]'
+    );
+
     -- ── App tables ──
 
     CREATE TABLE IF NOT EXISTS users (

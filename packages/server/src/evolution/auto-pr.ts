@@ -1,3 +1,5 @@
+import { nanoid } from 'nanoid'
+
 import { execFileSync, execSync } from 'node:child_process'
 import { readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -301,6 +303,7 @@ export async function runAutoFix(onProgress?: ProgressCallback): Promise<AutoFix
   const updateIdCol = (t: FixTarget) => (t.source === 'pattern' ? 'pattern_id' : 'behavior_id')
   const branchPrefix = (t: FixTarget) => (t.source === 'pattern' ? 'fix' : 'improve')
   const sourceFiles = listSourceFiles()
+  const runStartedAt = (db.prepare("SELECT datetime('now') AS t").get() as { t: string }).t
 
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i]
@@ -550,6 +553,15 @@ ${fileContext}
       })
     }
   }
+
+  // Persist this auto-fix run so the dashboard can show its history, not just live logs.
+  const prCreated = results.filter((r) => r.status === 'pr_created').length
+  const branchCreated = results.filter((r) => r.status === 'branch_created').length
+  const failed = results.filter((r) => r.status === 'failed').length
+  db.prepare(
+    `INSERT INTO autofix_runs (run_id, started_at, finished_at, total_targets, pr_created, branch_created, failed, results)
+     VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?)`,
+  ).run(`afr_${nanoid()}`, runStartedAt, targets.length, prCreated, branchCreated, failed, JSON.stringify(results))
 
   log(`全部完成，共处理 ${targets.length} 个目标`)
   return results
