@@ -38,18 +38,26 @@ chatRoutes.post('/message', async (c) => {
   return streamSSE(c, async (stream) => {
     await stream.writeSSE({ data: JSON.stringify({ conversationId }), event: 'conversation' })
 
-    const events = agentLoop({
-      userId,
-      conversationId,
-      userMessage: message,
-      provider: resolvedProvider,
-      model: resolvedModel,
-    })
+    try {
+      const events = agentLoop({
+        userId,
+        conversationId,
+        userMessage: message,
+        provider: resolvedProvider,
+        model: resolvedModel,
+      })
 
-    for await (const event of events) {
+      for await (const event of events) {
+        await stream.writeSSE({
+          event: event.type,
+          data: JSON.stringify(event),
+        })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
       await stream.writeSSE({
-        event: event.type,
-        data: JSON.stringify(event),
+        event: 'error',
+        data: JSON.stringify({ type: 'error', message }),
       })
     }
   })

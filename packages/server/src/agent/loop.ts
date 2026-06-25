@@ -54,14 +54,14 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
   const messages = compressMessages(rawMessages)
   const compressionTriggered = messages.length < rawMessages.length
 
-  const llmModel = getModel(provider, modelId)
-  const tools = makeTools(userId)
-
   let status: 'success' | 'error' = 'success'
   let pendingToolArgs: Record<string, unknown> = {}
   let stepText = ''
 
   try {
+    const llmModel = getModel(provider, modelId)
+    const tools = makeTools(userId)
+
     const result = streamText({
       model: llmModel,
       system: SYSTEM_PROMPT,
