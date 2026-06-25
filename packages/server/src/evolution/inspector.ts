@@ -50,7 +50,7 @@ export async function runInspection(onProgress?: ProgressCallback): Promise<stri
   const round =
     ((db.prepare('SELECT MAX(round) as max FROM inspections').get() as { max: number | null })?.max ?? 0) + 1
 
-  log(`开始巡检 A 第 ${round} 轮...`)
+  log(`开始巡检第 ${round} 轮...`)
 
   db.prepare('INSERT INTO inspections (inspection_id, round, traces_analyzed) VALUES (?, ?, 0)').run(
     inspectionId,

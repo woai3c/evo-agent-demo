@@ -223,7 +223,7 @@ export function AdminInspections() {
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300"
           >
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {running ? '巡检中...' : '巡检 A：识别 Pattern'}
+            {running ? '巡检中...' : '巡检：识别 Pattern'}
           </button>
           <button
             onClick={runAutofix}
@@ -231,18 +231,18 @@ export function AdminInspections() {
             className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700 disabled:bg-gray-300"
           >
             {fixing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-            {fixing ? '修复中...' : '巡检 B：自动修复'}
+            {fixing ? '修复中...' : '自动修复'}
           </button>
         </div>
       </div>
 
-      {/* Tabs: Inspection A history vs Auto-fix (Inspection B) history */}
+      {/* Tabs: Inspection history vs Auto-fix history */}
       <div className="flex gap-1 border-b mb-4">
         <button
           onClick={() => setTab('inspect')}
           className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${tab === 'inspect' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
-          巡检 A 记录（{inspections.length}）
+          巡检记录（{inspections.length}）
         </button>
         <button
           onClick={() => setTab('autofix')}
@@ -253,9 +253,9 @@ export function AdminInspections() {
       </div>
 
       {tab === 'inspect' ? (
-        <LogPanel logs={inspectLogs} title="巡检 A 执行日志" />
+        <LogPanel logs={inspectLogs} title="巡检执行日志" />
       ) : (
-        <LogPanel logs={autofixLogs} title="巡检 B 自动修复日志" />
+        <LogPanel logs={autofixLogs} title="自动修复日志" />
       )}
 
       {tab === 'inspect' ? (
@@ -368,12 +368,12 @@ export function AdminInspections() {
 
           {fixResults && fixResults.length === 0 && (
             <div className="border rounded-lg bg-gray-50 p-4 mb-6 text-sm text-gray-500">
-              没有待修复的 Harness 缺陷。请先运行巡检 A 识别问题。
+              没有待修复的 Harness 缺陷。请先运行巡检识别问题。
             </div>
           )}
 
           {autofixRuns.length === 0 ? (
-            <p className="text-gray-400">暂未运行过自动修复。点击上方“巡检 B：自动修复”开始。</p>
+            <p className="text-gray-400">暂未运行过自动修复。点击上方“自动修复”开始。</p>
           ) : (
             <div className="space-y-3">
               {autofixRuns.map((run) => (

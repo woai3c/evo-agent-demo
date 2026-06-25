@@ -29,7 +29,7 @@ pnpm dev:web                  # 另开终端，启动前端 (5173)
 # 1. 注入 mock 流量（含 ~35% 错误）—— 不需要 server
 pnpm simulate --mock
 
-# 2. 巡检 A：分析未匹配错误，自动生成 Pattern —— 不需要 server（调 LLM API）
+# 2. 巡检：分析未匹配错误，自动生成 Pattern —— 不需要 server（调 LLM API）
 pnpm inspect
 
 # 3. 打开管理面板查看巡检结果
@@ -38,7 +38,7 @@ pnpm inspect
 # 4. 重复执行，观察收敛效果（新增 Pattern → 0，覆盖率 → 100%）
 pnpm simulate --mock && pnpm inspect
 
-# 5. 巡检 B：为 harness_bug / critical 行为自动生成 fix PR —— PR 提交到你的 origin（务必先 Fork！需 gh CLI 已登录）
+# 5. 自动修复：为 harness_bug / critical 行为自动生成 fix PR —— PR 提交到你的 origin（务必先 Fork！需 gh CLI 已登录）
 pnpm autofix
 ```
 
@@ -99,8 +99,8 @@ pnpm simulate 20        # 发送 20 轮对话
 pnpm simulate --mock    # 直接往数据库插入 mock trace 数据（不需要启动 server，不调用 API，默认 100 条）
 pnpm simulate --mock 50 # 插入 50 条 mock trace
 pnpm simulate --errors  # 只发送会触发错误的 prompt（真实模式，制造失败数据用）
-pnpm inspect            # 巡检 A：错误模式识别 + 行为分析（不需 server，调用 LLM API）
-pnpm autofix            # 巡检 B：为 harness bug 自动生成 fix PR（不需 server，需 gh CLI 已登录）
+pnpm inspect            # 巡检：错误模式识别 + 行为分析（不需 server，调用 LLM API）
+pnpm autofix            # 自动修复：为 harness bug 自动生成 fix PR（不需 server，需 gh CLI 已登录）
 ```
 
 ## 环境变量

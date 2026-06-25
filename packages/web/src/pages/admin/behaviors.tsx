@@ -291,7 +291,7 @@ export function AdminBehaviors() {
                                 }`}
                               >
                                 {b.fixStatus === 'unfixed'
-                                  ? '待修复（运行巡检 B）'
+                                  ? '待修复（运行自动修复）'
                                   : b.fixStatus === 'branch_created'
                                     ? '已创建分支'
                                     : b.fixStatus === 'merged'
