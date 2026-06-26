@@ -134,6 +134,12 @@ export function initDatabase(dbPath: string): Database.Database {
       results        TEXT NOT NULL DEFAULT '[]'
     );
 
+    -- Generic key/value store for harness metadata (e.g. behavior clustering input signature)
+    CREATE TABLE IF NOT EXISTS kv_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     -- ── App tables ──
 
     CREATE TABLE IF NOT EXISTS users (

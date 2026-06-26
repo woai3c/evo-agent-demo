@@ -46,7 +46,7 @@ let cachedInspectLogs: string[] = []
 let cachedAutofixLogs: string[] = []
 let cachedFixResults: AutoFixResultItem[] | null = null
 
-function LogPanel({ logs, title }: { logs: string[]; title: string }) {
+function LogPanel({ logs, title, busy = false }: { logs: string[]; title: string; busy?: boolean }) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
 
@@ -54,7 +54,7 @@ function LogPanel({ logs, title }: { logs: string[]; title: string }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs.length])
 
-  if (logs.length === 0) return null
+  if (logs.length === 0 && !busy) return null
 
   const copyLogs = async () => {
     try {
@@ -88,6 +88,12 @@ function LogPanel({ logs, title }: { logs: string[]; title: string }) {
             {log}
           </div>
         ))}
+        {busy && (
+          <div className="flex items-center gap-2 pt-1 text-yellow-400">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>处理中…</span>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
     </div>
@@ -249,9 +255,9 @@ export function AdminInspections() {
       </div>
 
       {tab === 'inspect' ? (
-        <LogPanel logs={inspectLogs} title="巡检执行日志" />
+        <LogPanel logs={inspectLogs} title="巡检执行日志" busy={running} />
       ) : (
-        <LogPanel logs={autofixLogs} title="自动修复日志" />
+        <LogPanel logs={autofixLogs} title="自动修复日志" busy={fixing} />
       )}
 
       {tab === 'inspect' ? (

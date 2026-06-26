@@ -18,7 +18,9 @@ const BehaviorClusterSchema = z.object({
       name: z.string().describe('Short behavior pattern name, e.g. "Web Search + Summarize"'),
       description: z.string().describe('What this behavior pattern does, 1-2 sentences'),
       toolSequence: z.string().describe('Representative tool call sequence, e.g. "webSearch→webFetch→(answer)"'),
-      operationIds: z.array(z.string()).describe('List of operation_ids that belong to this behavior'),
+      operationIndexes: z
+        .array(z.number())
+        .describe('The bracketed [N] index numbers (from the operation list above) that belong to this behavior'),
     }),
   ),
 })
@@ -198,10 +200,42 @@ export interface BehaviorAnalysisResult {
 }
 
 export async function analyzeBehaviors(log: (msg: string) => void = () => {}): Promise<BehaviorAnalysisResult> {
-  const summaries = loadOperationSummaries(200)
+  const summaries = loadOperationSummaries(100)
 
   if (summaries.length < 5) {
     return { behaviorsFound: 0, unhealthyCount: 0, tokensUsed: { input: 0, output: 0 } }
+  }
+
+  // Skip re-clustering when the operation set is unchanged since the last run.
+  // Phase 2 wipes and rebuilds the whole behaviors table every round, so repeating
+  // an inspection on identical data would re-run ~60-100s of LLM clustering for the
+  // same result. Signature = count + max rowid of clusterable operations; any new
+  // operation (exactly what we'd re-cluster for) changes it. rowid is used instead
+  // of created_at because simulated rows carry backdated created_at.
+  const inputSig = (() => {
+    const r = db
+      .prepare('SELECT COUNT(*) AS c, COALESCE(MAX(rowid), 0) AS m FROM operations WHERE conversation_id IS NOT NULL')
+      .get() as { c: number; m: number }
+    return `${r.c}:${r.m}`
+  })()
+  const prevSig = (
+    db.prepare("SELECT value FROM kv_meta WHERE key = 'behavior_input_sig'").get() as { value: string } | undefined
+  )?.value
+  const existingBehaviors = db.prepare('SELECT health_score, health_flags FROM behaviors').all() as {
+    health_score: number
+    health_flags: string
+  }[]
+
+  if (existingBehaviors.length > 0 && prevSig === inputSig) {
+    const unhealthyCount = existingBehaviors.filter((b) => {
+      try {
+        return isUnhealthy(b.health_score, JSON.parse(b.health_flags) as string[])
+      } catch {
+        return false
+      }
+    }).length
+    log('Phase 2: operation 集合自上轮无变化，跳过聚类（复用已有行为分析结果）')
+    return { behaviorsFound: existingBehaviors.length, unhealthyCount, tokensUsed: { input: 0, output: 0 } }
   }
 
   const provider = (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as ProviderName
@@ -213,8 +247,8 @@ export async function analyzeBehaviors(log: (msg: string) => void = () => {}): P
   // Phase 2a: LLM clustering
   const operationLines = summaries
     .map(
-      (s) =>
-        `[${s.operationId}] "${s.userMessage}" → tools: ${s.toolSequence} → ${s.status} (${s.totalSteps} steps, ${(s.totalDuration / 1000).toFixed(1)}s)`,
+      (s, i) =>
+        `[${i}] "${s.userMessage}" → tools: ${s.toolSequence} → ${s.status} (${s.totalSteps} steps, ${(s.totalDuration / 1000).toFixed(1)}s)`,
     )
     .join('\n')
 
@@ -232,7 +266,7 @@ ${operationLines}
 1. Group these operations into 3-15 semantic behavior patterns based on user intent and tool usage
 2. Each behavior should represent a recurring pattern (at least 2 operations)
 3. Name each behavior concisely (e.g. "Web Research + Summary", "Database Query", "Code Execution")
-4. Include the operation_ids that belong to each behavior
+4. For each behavior, list the [N] index numbers (the bracketed integers shown before each operation) that belong to it
 5. Describe what the behavior pattern does in 1-2 sentences`,
     abortSignal: AbortSignal.timeout(120_000),
   })
@@ -246,7 +280,19 @@ ${operationLines}
   // Phase 2b: Deterministic health evaluation + metrics computation
   const behaviorRows = clusterResult.object.behaviors
     .map((b) => {
-      const ops = summaries.filter((s) => b.operationIds.includes(s.operationId))
+      // Map model-returned indexes back to summaries. Defensive: round to int,
+      // drop out-of-range, and dedupe — a repeated or garbage index must not
+      // double-count or crash. operationId is then taken from our own summary,
+      // never echoed by the model, so IDs stay exact.
+      const seen = new Set<number>()
+      const ops: OperationSummary[] = []
+      for (const n of b.operationIndexes) {
+        const i = Math.round(n)
+        if (i >= 0 && i < summaries.length && !seen.has(i)) {
+          seen.add(i)
+          ops.push(summaries[i])
+        }
+      }
       if (ops.length === 0) return null
 
       const successRate = ops.filter((o) => o.status === 'success').length / ops.length
@@ -406,6 +452,9 @@ ${unhealthyDesc}
     }
   })
   writeAll()
+
+  // Remember this input signature so an unchanged next round can skip clustering.
+  db.prepare("INSERT OR REPLACE INTO kv_meta (key, value) VALUES ('behavior_input_sig', ?)").run(inputSig)
 
   return {
     behaviorsFound: behaviorRows.length,
