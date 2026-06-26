@@ -127,7 +127,7 @@ dashboardRoutes.get('/behaviors', async (c) => {
   const behaviors = db
     .prepare(
       `SELECT behavior_id, name, description, tool_sequence, operation_count,
-              success_rate, avg_duration, avg_steps, avg_tokens, avg_cost,
+              success_rate, avg_duration, avg_steps, avg_tokens,
               tool_error_rate, health_score, health_flags, suggestion,
               suggestion_severity, fix_status, fix_pr_url,
               sample_operations, first_seen, last_seen, created_by
@@ -153,7 +153,6 @@ dashboardRoutes.get('/behaviors', async (c) => {
     avgDuration: b.avg_duration,
     avgSteps: b.avg_steps,
     avgTokens: b.avg_tokens,
-    avgCost: b.avg_cost,
     toolErrorRate: b.tool_error_rate,
     healthScore: b.health_score,
     healthFlags: JSON.parse((b.health_flags as string) || '[]'),
@@ -222,7 +221,7 @@ dashboardRoutes.get('/trends', async (c) => {
 
   const inspectionSnapshots = db
     .prepare(
-      `SELECT round, started_at, traces_analyzed, new_patterns, harness_bugs, cost,
+      `SELECT round, started_at, traces_analyzed, new_patterns, harness_bugs,
               (SELECT CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS REAL) / MAX(COUNT(*), 1)
                FROM operations WHERE created_at < i.started_at) as success_rate_before,
               (SELECT CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS REAL) / MAX(COUNT(*), 1)

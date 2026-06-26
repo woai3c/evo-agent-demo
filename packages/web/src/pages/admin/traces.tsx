@@ -15,7 +15,6 @@ interface OperationRow {
   total_steps: number
   total_duration: number
   total_tokens: { input: number; output: number; cached: number }
-  cost: number
   error_summary: string | null
   created_at: string
   conversation_title: string | null
@@ -155,7 +154,6 @@ export function AdminTraces() {
                 <th className="px-4 py-2 text-right">步数</th>
                 <th className="px-4 py-2 text-right">耗时</th>
                 <th className="px-4 py-2 text-right">Tokens</th>
-                <th className="px-4 py-2 text-right">费用</th>
                 <th className="px-4 py-2 text-left">时间</th>
               </tr>
             </thead>
@@ -210,12 +208,11 @@ export function AdminTraces() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-right">¥{op.cost.toFixed(4)}</td>
                       <td className="px-4 py-2 text-xs text-gray-400">{formatLocalTime(op.created_at)}</td>
                     </tr>
                     {expandedId === op.operation_id && (
                       <tr>
-                        <td colSpan={10} className="bg-gray-50 px-8 py-4">
+                        <td colSpan={9} className="bg-gray-50 px-8 py-4">
                           <StepTimeline steps={steps} />
                         </td>
                       </tr>

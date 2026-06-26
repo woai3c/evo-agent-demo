@@ -9,7 +9,6 @@ import type { ProviderName } from '@evo/shared'
 
 import { db } from '../db/index.js'
 import { getModel } from '../providers/registry.js'
-import { estimateCost } from '../tracing/tracer.js'
 
 // ── Schemas ──
 
@@ -48,7 +47,6 @@ interface HealthEvaluation {
 interface GlobalStats {
   p90Duration: number
   p90Steps: number
-  p90Cost: number
   p90Tokens: number
 }
 
@@ -56,7 +54,7 @@ function evaluateHealth(
   successRate: number,
   avgDuration: number,
   avgSteps: number,
-  avgCost: number,
+  avgTokens: number,
   toolErrorRate: number,
   global: GlobalStats,
 ): HealthEvaluation {
@@ -72,8 +70,8 @@ function evaluateHealth(
   if (avgSteps <= global.p90Steps) score += 0.2
   else flags.push('high_step_count')
 
-  if (avgCost <= global.p90Cost) score += 0.2
-  else flags.push('high_cost')
+  if (avgTokens <= global.p90Tokens) score += 0.2
+  else flags.push('high_tokens')
 
   if (toolErrorRate <= 0.2) score += 0.2
   else flags.push('high_tool_error_rate')
@@ -99,7 +97,6 @@ interface OperationSummary {
   totalSteps: number
   totalDuration: number
   totalTokens: number
-  cost: number
   toolSequence: string
   toolErrors: number
   toolCalls: number
@@ -110,7 +107,7 @@ function loadOperationSummaries(limit: number): OperationSummary[] {
   const ops = db
     .prepare(
       `SELECT o.operation_id, o.conversation_id, o.status, o.total_steps,
-              o.total_duration, o.total_tokens, o.cost
+              o.total_duration, o.total_tokens
        FROM operations o
        WHERE o.conversation_id IS NOT NULL
        ORDER BY o.created_at DESC
@@ -165,7 +162,6 @@ function loadOperationSummaries(limit: number): OperationSummary[] {
         totalSteps: op.total_steps as number,
         totalDuration: op.total_duration as number,
         totalTokens: (tokens.input ?? 0) + (tokens.output ?? 0),
-        cost: op.cost as number,
         toolSequence,
         toolErrors,
         toolCalls,
@@ -177,7 +173,7 @@ function loadOperationSummaries(limit: number): OperationSummary[] {
 
 function computeGlobalStats(summaries: OperationSummary[]): GlobalStats {
   if (summaries.length === 0) {
-    return { p90Duration: Infinity, p90Steps: Infinity, p90Cost: Infinity, p90Tokens: Infinity }
+    return { p90Duration: Infinity, p90Steps: Infinity, p90Tokens: Infinity }
   }
 
   const sorted = <T>(arr: T[], fn: (v: T) => number) => [...arr].sort((a, b) => fn(a) - fn(b))
@@ -189,7 +185,6 @@ function computeGlobalStats(summaries: OperationSummary[]): GlobalStats {
   return {
     p90Duration: p90(summaries, (s) => s.totalDuration),
     p90Steps: p90(summaries, (s) => s.totalSteps),
-    p90Cost: p90(summaries, (s) => s.cost),
     p90Tokens: p90(summaries, (s) => s.totalTokens),
   }
 }
@@ -200,14 +195,13 @@ export interface BehaviorAnalysisResult {
   behaviorsFound: number
   unhealthyCount: number
   tokensUsed: { input: number; output: number }
-  cost: number
 }
 
 export async function analyzeBehaviors(log: (msg: string) => void = () => {}): Promise<BehaviorAnalysisResult> {
   const summaries = loadOperationSummaries(200)
 
   if (summaries.length < 5) {
-    return { behaviorsFound: 0, unhealthyCount: 0, tokensUsed: { input: 0, output: 0 }, cost: 0 }
+    return { behaviorsFound: 0, unhealthyCount: 0, tokensUsed: { input: 0, output: 0 } }
   }
 
   const provider = (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as ProviderName
@@ -259,12 +253,11 @@ ${operationLines}
       const avgDuration = ops.reduce((sum, o) => sum + o.totalDuration, 0) / ops.length
       const avgSteps = ops.reduce((sum, o) => sum + o.totalSteps, 0) / ops.length
       const avgTokens = ops.reduce((sum, o) => sum + o.totalTokens, 0) / ops.length
-      const avgCost = ops.reduce((sum, o) => sum + o.cost, 0) / ops.length
       const totalToolCalls = ops.reduce((sum, o) => sum + o.toolCalls, 0)
       const totalToolErrors = ops.reduce((sum, o) => sum + o.toolErrors, 0)
       const toolErrorRate = totalToolCalls > 0 ? totalToolErrors / totalToolCalls : 0
 
-      const health = evaluateHealth(successRate, avgDuration, avgSteps, avgCost, toolErrorRate, globalStats)
+      const health = evaluateHealth(successRate, avgDuration, avgSteps, avgTokens, toolErrorRate, globalStats)
 
       const timestamps = ops
         .map((o) => o.operationId)
@@ -286,7 +279,6 @@ ${operationLines}
         avgDuration: Math.round(avgDuration),
         avgSteps,
         avgTokens: Math.round(avgTokens),
-        avgCost,
         toolErrorRate,
         healthScore: health.score,
         healthFlags: health.flags,
@@ -309,7 +301,7 @@ ${operationLines}
       .map(
         (b, i) =>
           `[${i}] "${b.name}" (health=${b.healthScore.toFixed(1)}, flags=[${b.healthFlags.join(',')}])
-    success_rate=${(b.successRate * 100).toFixed(0)}%, avg_duration=${(b.avgDuration / 1000).toFixed(1)}s, avg_steps=${b.avgSteps.toFixed(1)}, avg_cost=¥${b.avgCost.toFixed(4)}, tool_error_rate=${(b.toolErrorRate * 100).toFixed(0)}%
+    success_rate=${(b.successRate * 100).toFixed(0)}%, avg_duration=${(b.avgDuration / 1000).toFixed(1)}s, avg_steps=${b.avgSteps.toFixed(1)}, avg_tokens=${b.avgTokens}, tool_error_rate=${(b.toolErrorRate * 100).toFixed(0)}%
     tool_sequence: ${b.toolSequence}`,
       )
       .join('\n')
@@ -380,10 +372,10 @@ ${unhealthyDesc}
   // Write to DB (clear old behaviors and insert new)
   const insertStmt = db.prepare(`
     INSERT INTO behaviors (behavior_id, name, description, tool_sequence, operation_count,
-      success_rate, avg_duration, avg_steps, avg_tokens, avg_cost, tool_error_rate,
+      success_rate, avg_duration, avg_steps, avg_tokens, tool_error_rate,
       health_score, health_flags, suggestion, suggestion_severity, fix_status, fix_pr_url,
       sample_operations, first_seen, last_seen, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const writeAll = db.transaction(() => {
@@ -399,7 +391,6 @@ ${unhealthyDesc}
         b.avgDuration,
         b.avgSteps,
         b.avgTokens,
-        b.avgCost,
         b.toolErrorRate,
         b.healthScore,
         JSON.stringify(b.healthFlags),
@@ -416,16 +407,9 @@ ${unhealthyDesc}
   })
   writeAll()
 
-  const totalCost = estimateCost(
-    { input: totalTokensUsed.input, output: totalTokensUsed.output, cached: 0 },
-    provider,
-    modelId,
-  )
-
   return {
     behaviorsFound: behaviorRows.length,
     unhealthyCount: unhealthy.length,
     tokensUsed: totalTokensUsed,
-    cost: totalCost,
   }
 }

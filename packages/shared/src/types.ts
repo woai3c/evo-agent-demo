@@ -11,7 +11,6 @@ export interface Operation {
   totalSteps: number
   totalDuration: number
   totalTokens: TokenUsage
-  cost: number
   errorSummary: string | null
   createdAt: string
 }
@@ -104,7 +103,6 @@ export interface Inspection {
   newPatterns: number
   harnessBugs: number
   tokensUsed: TokenUsage | null
-  cost: number
   summary: string
   details: InspectionDetails | null
 }
@@ -134,7 +132,6 @@ export interface Behavior {
   avgDuration: number
   avgSteps: number
   avgTokens: number
-  avgCost: number
   toolErrorRate: number
   healthScore: number
   healthFlags: string[]

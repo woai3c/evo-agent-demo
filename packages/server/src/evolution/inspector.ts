@@ -8,7 +8,6 @@ import type { ProviderName } from '@evo/shared'
 
 import { db } from '../db/index.js'
 import { getModel } from '../providers/registry.js'
-import { estimateCost } from '../tracing/tracer.js'
 import { applyFixes } from './auto-fix.js'
 import { analyzeBehaviors } from './behavior-analyzer.js'
 import { bucketErrors } from './error-bucketer.js'
@@ -64,7 +63,6 @@ export async function runInspection(onProgress?: ProgressCallback): Promise<stri
   let patterns: z.infer<typeof PatternSuggestionSchema>['patterns'] = []
   let bugs: z.infer<typeof PatternSuggestionSchema>['bugs'] = []
   let tokensUsed = '{}'
-  let cost = 0
   // Phase 1: error pattern recognition (only if unmatched errors exist)
   const unmatchedBuckets = bucketErrors({ unmatched: true })
 
@@ -134,11 +132,6 @@ ${bucketSummary}
           output: result.usage.completionTokens,
           cached: 0,
         })
-        cost = estimateCost(
-          { input: result.usage.promptTokens, output: result.usage.completionTokens, cached: 0 },
-          provider,
-          modelId,
-        )
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -169,7 +162,6 @@ ${bucketSummary}
         cached: prev.cached ?? 0,
       }
       tokensUsed = JSON.stringify(combinedTokens)
-      cost += behaviorAnalysis.cost
     }
   } catch (e) {
     log(`Phase 2 失败（非关键）: ${e instanceof Error ? e.message : String(e)}`)
@@ -182,7 +174,6 @@ ${bucketSummary}
       new_patterns = ?,
       harness_bugs = ?,
       tokens_used = ?,
-      cost = ?,
       summary = ?,
       details = ?
     WHERE inspection_id = ?`,
@@ -191,12 +182,11 @@ ${bucketSummary}
     newPatterns,
     harnessBugs,
     tokensUsed,
-    cost,
     summary,
     JSON.stringify({ newPatterns: patterns, bugs, behaviorAnalysis }),
     inspectionId,
   )
 
-  log(`巡检完成（¥${cost.toFixed(4)}）: ${summary}`)
+  log(`巡检完成: ${summary}`)
   return inspectionId
 }

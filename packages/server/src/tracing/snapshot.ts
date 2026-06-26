@@ -18,7 +18,6 @@ export function buildSnapshot(operationId: string): { operation: Operation; step
     totalSteps: row.total_steps as number,
     totalDuration: row.total_duration as number,
     totalTokens: JSON.parse((row.total_tokens as string) || '{"input":0,"output":0,"cached":0}'),
-    cost: row.cost as number,
     errorSummary: (row.error_summary as string) ?? null,
     createdAt: row.created_at as string,
   }

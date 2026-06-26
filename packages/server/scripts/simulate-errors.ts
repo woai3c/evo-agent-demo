@@ -311,8 +311,8 @@ function runMock(n: number) {
      VALUES (?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' minutes'))`,
   )
   const insertOp = db.prepare(
-    `INSERT INTO operations (operation_id, conversation_id, user_id, model, provider, status, total_steps, total_duration, total_tokens, cost, error_summary, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' minutes'))`,
+    `INSERT INTO operations (operation_id, conversation_id, user_id, model, provider, status, total_steps, total_duration, total_tokens, error_summary, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' minutes'))`,
   )
   const insertStep = db.prepare(
     `INSERT INTO steps (step_id, operation_id, step_index, type, duration_ms, tokens, tool_name, tool_success, error, created_at)
@@ -339,7 +339,6 @@ function runMock(n: number) {
       const tokensIn = randomInt(500, 15000)
       const tokensOut = randomInt(50, 3000)
       const tokens = JSON.stringify({ input: tokensIn, output: tokensOut, cached: 0 })
-      const cost = tokensIn * 0.000001 + tokensOut * 0.000003
       const error = isError ? randomChoice(ERROR_TYPES) : null
 
       // Give each mock operation a realistic source conversation so the admin
@@ -359,7 +358,6 @@ function runMock(n: number) {
         steps,
         durationMs,
         tokens,
-        cost,
         error?.message ?? null,
         minutesAgo,
       )

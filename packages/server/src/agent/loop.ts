@@ -129,7 +129,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
 
             // Provider cache-hit token fields are sometimes NaN/undefined (e.g.
             // DeepSeek omits prompt_cache_hit_tokens). `NaN ?? 0` is still NaN, so
-            // coerce to a finite number — otherwise cost and cached totals become NaN.
+            // coerce to a finite number — otherwise cached totals become NaN.
             const toFinite = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
             const meta = part.providerMetadata
             let cachedTokens = 0

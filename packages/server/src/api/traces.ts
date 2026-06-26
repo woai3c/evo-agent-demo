@@ -40,7 +40,7 @@ tracesRoutes.get('/', async (c) => {
 
   const operations = db
     .prepare(
-      `SELECT o.operation_id, o.user_id, o.model, o.provider, o.status, o.total_steps, o.total_duration, o.total_tokens, o.cost, o.error_summary, o.created_at,
+      `SELECT o.operation_id, o.user_id, o.model, o.provider, o.status, o.total_steps, o.total_duration, o.total_tokens, o.error_summary, o.created_at,
               c.title as conversation_title
        FROM operations o
        LEFT JOIN conversations c ON o.conversation_id = c.conversation_id

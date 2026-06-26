@@ -56,7 +56,7 @@ const insertErrorStmt = db.prepare(`
 
 const updateOperationStmt = db.prepare(`
   UPDATE operations
-  SET status = ?, total_steps = ?, total_duration = ?, total_tokens = ?, cost = ?, error_summary = ?
+  SET status = ?, total_steps = ?, total_duration = ?, total_tokens = ?, error_summary = ?
   WHERE operation_id = ?
 `)
 
@@ -124,18 +124,9 @@ export class TraceStore {
     totalSteps: number,
     totalDuration: number,
     totalTokens: TokenUsage,
-    cost: number,
     errorSummary: string | null,
   ): void {
-    updateOperationStmt.run(
-      status,
-      totalSteps,
-      totalDuration,
-      JSON.stringify(totalTokens),
-      cost,
-      errorSummary,
-      operationId,
-    )
+    updateOperationStmt.run(status, totalSteps, totalDuration, JSON.stringify(totalTokens), errorSummary, operationId)
   }
 }
 

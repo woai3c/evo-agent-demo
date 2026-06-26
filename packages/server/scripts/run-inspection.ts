@@ -27,7 +27,6 @@ console.log(`  Round: ${inspection.round}`)
 console.log(`  Traces analyzed: ${inspection.traces_analyzed}`)
 console.log(`  New patterns: ${inspection.new_patterns}`)
 console.log(`  Harness bugs: ${inspection.harness_bugs}`)
-console.log(`  Cost: $${(inspection.cost as number).toFixed(4)}`)
 console.log(`  Summary: ${inspection.summary}`)
 
 const remainingUnmatched = (

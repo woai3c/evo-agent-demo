@@ -24,7 +24,6 @@ interface InspectionRow {
   new_patterns: number
   harness_bugs: number
   tokens_used: { input: number; output: number } | null
-  cost: number
   summary: string
   details: { newPatterns: unknown[]; bugs: { title: string; severity: string; description: string }[] } | null
 }
@@ -202,7 +201,6 @@ export function AdminInspections() {
     }
   }
 
-  const totalCost = inspections.reduce((sum, i) => sum + i.cost, 0)
   const busy = running || fixing
 
   return (
@@ -211,9 +209,7 @@ export function AdminInspections() {
         <div>
           <h1 className="text-2xl font-bold">巡检记录</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {tab === 'inspect'
-              ? `共 ${inspections.length} 轮巡检，累计成本 ¥${totalCost.toFixed(4)}`
-              : `共 ${autofixRuns.length} 次自动修复`}
+            {tab === 'inspect' ? `共 ${inspections.length} 轮巡检` : `共 ${autofixRuns.length} 次自动修复`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -283,7 +279,6 @@ export function AdminInspections() {
                         <p className="text-xs text-gray-400 mt-0.5">{formatLocalTime(insp.started_at)}</p>
                       </div>
                     </div>
-                    <span className="text-xs text-gray-400">¥{insp.cost.toFixed(4)}</span>
                   </button>
 
                   {expandedId === insp.inspection_id && (

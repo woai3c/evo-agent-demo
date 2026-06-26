@@ -16,7 +16,6 @@ interface TrendData {
     traces_analyzed: number
     new_patterns: number
     harness_bugs: number
-    cost: number
     success_rate_before: number
     success_rate_after: number
     unmatched_before: number
@@ -156,7 +155,6 @@ export function AdminTrends() {
                     <th className="px-3 py-2 text-center">成功率变化</th>
                     <th className="px-3 py-2 text-center">未匹配错误变化</th>
                     <th className="px-3 py-2 text-center">Pattern 总数变化</th>
-                    <th className="px-3 py-2 text-right">成本</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -178,7 +176,6 @@ export function AdminTrends() {
                       <td className="px-3 py-2 text-center text-xs">
                         {s.patterns_before} → {s.patterns_after}
                       </td>
-                      <td className="px-3 py-2 text-right text-xs">¥{s.cost.toFixed(4)}</td>
                     </tr>
                   ))}
                 </tbody>

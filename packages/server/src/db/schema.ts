@@ -23,7 +23,6 @@ export function initDatabase(dbPath: string): Database.Database {
       total_steps     INTEGER NOT NULL DEFAULT 0,
       total_duration  INTEGER NOT NULL DEFAULT 0,
       total_tokens    TEXT NOT NULL DEFAULT '{}',
-      cost            REAL NOT NULL DEFAULT 0,
       error_summary   TEXT,
       created_at      TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -88,7 +87,6 @@ export function initDatabase(dbPath: string): Database.Database {
       new_patterns    INTEGER NOT NULL DEFAULT 0,
       harness_bugs    INTEGER NOT NULL DEFAULT 0,
       tokens_used     TEXT,
-      cost            REAL NOT NULL DEFAULT 0,
       summary         TEXT NOT NULL DEFAULT '',
       details         TEXT
     );
@@ -103,7 +101,6 @@ export function initDatabase(dbPath: string): Database.Database {
       avg_duration    INTEGER NOT NULL DEFAULT 0,
       avg_steps       REAL NOT NULL DEFAULT 0,
       avg_tokens      INTEGER NOT NULL DEFAULT 0,
-      avg_cost        REAL NOT NULL DEFAULT 0,
       tool_error_rate REAL NOT NULL DEFAULT 0,
       health_score    REAL NOT NULL DEFAULT 1.0,
       health_flags    TEXT NOT NULL DEFAULT '[]',

@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock, Coins, Footprints, Gauge } from 'lucide-react'
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock, Footprints, Gauge } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
 
@@ -15,7 +15,7 @@ interface BehaviorRow {
   avgDuration: number
   avgSteps: number
   avgTokens: number
-  avgCost: number
+
   toolErrorRate: number
   healthScore: number
   healthFlags: string[]
@@ -38,7 +38,7 @@ const FLAG_LABELS: Record<string, { label: string; color: string }> = {
   low_success_rate: { label: '成功率低', color: 'bg-red-100 text-red-700' },
   high_latency: { label: '延迟高', color: 'bg-orange-100 text-orange-700' },
   high_step_count: { label: '步数多', color: 'bg-yellow-100 text-yellow-700' },
-  high_cost: { label: '费用高', color: 'bg-purple-100 text-purple-700' },
+  high_tokens: { label: 'token 用量高', color: 'bg-purple-100 text-purple-700' },
   high_tool_error_rate: { label: '工具出错率高', color: 'bg-red-100 text-red-700' },
 }
 
@@ -175,8 +175,8 @@ export function AdminBehaviors() {
                       <div className="text-[10px]">步数</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-mono">¥{b.avgCost.toFixed(4)}</div>
-                      <div className="text-[10px]">费用</div>
+                      <div className="font-mono">{b.avgTokens.toLocaleString()}</div>
+                      <div className="text-[10px]">Tokens</div>
                     </div>
                     <HealthBar score={b.healthScore} />
                   </div>
@@ -206,7 +206,6 @@ export function AdminBehaviors() {
                                 : String(Math.round(b.avgTokens)),
                             icon: Gauge,
                           },
-                          { label: '平均费用', value: `¥${b.avgCost.toFixed(4)}`, icon: Coins },
                           {
                             label: '工具出错率',
                             value: `${(b.toolErrorRate * 100).toFixed(1)}%`,
