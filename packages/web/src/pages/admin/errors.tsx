@@ -45,6 +45,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   user_error: 'bg-yellow-100 text-yellow-700',
   provider_error: 'bg-orange-100 text-orange-700',
   harness_bug: 'bg-red-100 text-red-700',
+  ignore: 'bg-gray-100 text-gray-500',
 }
 
 export function AdminErrors() {

@@ -26,6 +26,7 @@ const CATEGORY_LABELS: Record<string, { text: string; color: string }> = {
   user_error: { text: '用户侧', color: 'bg-yellow-100 text-yellow-700' },
   provider_error: { text: '供应商侧', color: 'bg-orange-100 text-orange-700' },
   harness_bug: { text: 'Harness 缺陷', color: 'bg-red-100 text-red-700' },
+  ignore: { text: '已忽略', color: 'bg-gray-100 text-gray-500' },
 }
 
 function formatCreatedBy(createdBy: string): string {
@@ -111,7 +112,9 @@ export function AdminPatterns() {
       // Auto-generated patterns are derived from collected errors — only the
       // LLM-assigned category may be corrected; everything else stays locked.
       if (editingId && !editingManual) {
-        await updatePattern(editingId, { category: form.category })
+        const patch: Record<string, string> = { category: form.category }
+        if (form.category === 'ignore') patch.status = 'resolved'
+        await updatePattern(editingId, patch)
         closeDialog()
         await load()
         return
@@ -123,13 +126,15 @@ export function AdminPatterns() {
       if (form.provider !== '*') matchRule.provider = form.provider
 
       if (editingId) {
-        await updatePattern(editingId, {
+        const update: Record<string, unknown> = {
           name: form.name,
           category: form.category,
           provider: form.provider,
           error_type: form.errorType,
           match_rule: matchRule,
-        })
+        }
+        if (form.category === 'ignore') update.status = 'resolved'
+        await updatePattern(editingId, update)
       } else {
         await createPattern({
           name: form.name,
@@ -219,6 +224,7 @@ export function AdminPatterns() {
                   <option value="user_error">用户侧错误</option>
                   <option value="provider_error">供应商侧错误</option>
                   <option value="harness_bug">Harness 缺陷</option>
+                  <option value="ignore">忽略</option>
                 </select>
               </div>
               <div>

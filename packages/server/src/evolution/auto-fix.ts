@@ -5,7 +5,7 @@ import { backfillErrors, invalidatePatternCache } from './pattern-matcher.js'
 
 interface PatternSuggestion {
   name: string
-  category: 'user_error' | 'provider_error' | 'harness_bug'
+  category: 'user_error' | 'provider_error' | 'harness_bug' | 'ignore'
   errorType: string
   matchRule: {
     statusCode?: number | null

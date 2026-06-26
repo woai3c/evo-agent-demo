@@ -73,7 +73,7 @@ export interface TracedError {
 export interface Pattern {
   patternId: string
   name: string
-  category: 'user_error' | 'provider_error' | 'harness_bug'
+  category: 'user_error' | 'provider_error' | 'harness_bug' | 'ignore'
   provider: string
   errorType: string
   matchRule: MatchRule

@@ -17,7 +17,7 @@ const PatternSuggestionSchema = z.object({
   patterns: z.array(
     z.object({
       name: z.string().describe('Human-readable pattern name, e.g. deepseek-rate-limit-429'),
-      category: z.enum(['user_error', 'provider_error', 'harness_bug']),
+      category: z.enum(['user_error', 'provider_error', 'harness_bug', 'ignore']),
       errorType: z.string(),
       matchRule: z.object({
         statusCode: z.number().nullable().optional(),
@@ -94,6 +94,7 @@ ${bucketSummary}
    - user_error: caused by the user (expired API key, insufficient balance, bad input)
    - provider_error: caused by the LLM provider (rate limits, timeouts, service outages)
    - harness_bug: caused by our harness code (schema incompatibility, context overflow, tool bugs)
+   - ignore: noise or known-harmless errors the admin wants to skip (do NOT use unless explicitly instructed)
 
 2. Generate a pattern for each bucket with a matchRule that will catch similar errors in the future.
    - Use messageRegex for flexible message matching (escape special regex chars)
