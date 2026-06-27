@@ -157,11 +157,17 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           }
           break
 
-        case 'error':
+        case 'error': {
           status = 'error'
-          tracer.onError(String(part.error))
-          yield { type: 'error', message: String(part.error) }
+          const errObj = part.error
+          const errMessage =
+            typeof errObj === 'object' && errObj !== null ? String((errObj as Error).message ?? errObj) : String(errObj)
+          const errStatusCode =
+            typeof errObj === 'object' && errObj !== null ? (errObj as { statusCode?: number }).statusCode : undefined
+          tracer.onError(errMessage, errStatusCode)
+          yield { type: 'error', message: errMessage }
           break
+        }
       }
     }
 
