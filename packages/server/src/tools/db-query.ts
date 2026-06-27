@@ -56,6 +56,12 @@ export const dbQueryTool = tool({
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
+
+      // Help the LLM self-correct when it guesses a table name that doesn't exist
+      if (/no such table/i.test(message)) {
+        return { error: `SQL error: ${message}\n\n${SCHEMA_HINT}` }
+      }
+
       return { error: `SQL error: ${message}` }
     }
   },
