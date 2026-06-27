@@ -46,10 +46,23 @@ interface HealthEvaluation {
   flags: string[]
 }
 
-interface GlobalStats {
-  p90Duration: number
-  p90Steps: number
-  p90Tokens: number
+interface ThresholdTier {
+  maxAvgDuration: number
+  maxAvgSteps: number
+  maxAvgTokens: number
+}
+
+const WEB_TOOLS = ['webSearch', 'webFetch']
+
+const HEALTH_THRESHOLDS = {
+  minSuccessRate: 0.8,
+  maxToolErrorRate: 0.2,
+  light: { maxAvgDuration: 15_000, maxAvgSteps: 10, maxAvgTokens: 50_000 } as ThresholdTier,
+  heavy: { maxAvgDuration: 60_000, maxAvgSteps: 20, maxAvgTokens: 150_000 } as ThresholdTier,
+}
+
+function getThresholdTier(toolSequence: string): ThresholdTier {
+  return WEB_TOOLS.some((t) => toolSequence.includes(t)) ? HEALTH_THRESHOLDS.heavy : HEALTH_THRESHOLDS.light
 }
 
 function evaluateHealth(
@@ -58,24 +71,25 @@ function evaluateHealth(
   avgSteps: number,
   avgTokens: number,
   toolErrorRate: number,
-  global: GlobalStats,
+  toolSequence: string,
 ): HealthEvaluation {
+  const tier = getThresholdTier(toolSequence)
   const flags: string[] = []
   let score = 0
 
-  if (successRate >= 0.8) score += 0.2
+  if (successRate >= HEALTH_THRESHOLDS.minSuccessRate) score += 0.2
   else flags.push('low_success_rate')
 
-  if (avgDuration <= global.p90Duration) score += 0.2
+  if (avgDuration <= tier.maxAvgDuration) score += 0.2
   else flags.push('high_latency')
 
-  if (avgSteps <= global.p90Steps) score += 0.2
+  if (avgSteps <= tier.maxAvgSteps) score += 0.2
   else flags.push('high_step_count')
 
-  if (avgTokens <= global.p90Tokens) score += 0.2
+  if (avgTokens <= tier.maxAvgTokens) score += 0.2
   else flags.push('high_tokens')
 
-  if (toolErrorRate <= 0.2) score += 0.2
+  if (toolErrorRate <= HEALTH_THRESHOLDS.maxToolErrorRate) score += 0.2
   else flags.push('high_tool_error_rate')
 
   return { score, flags }
@@ -173,24 +187,6 @@ function loadOperationSummaries(limit: number): OperationSummary[] {
     .filter((s): s is OperationSummary => s !== null)
 }
 
-function computeGlobalStats(summaries: OperationSummary[]): GlobalStats {
-  if (summaries.length === 0) {
-    return { p90Duration: Infinity, p90Steps: Infinity, p90Tokens: Infinity }
-  }
-
-  const sorted = <T>(arr: T[], fn: (v: T) => number) => [...arr].sort((a, b) => fn(a) - fn(b))
-  const p90 = <T>(arr: T[], fn: (v: T) => number) => {
-    const s = sorted(arr, fn)
-    return fn(s[Math.floor(s.length * 0.9)] ?? s[s.length - 1])
-  }
-
-  return {
-    p90Duration: p90(summaries, (s) => s.totalDuration),
-    p90Steps: p90(summaries, (s) => s.totalSteps),
-    p90Tokens: p90(summaries, (s) => s.totalTokens),
-  }
-}
-
 // ── Main Entry ──
 
 export interface BehaviorAnalysisResult {
@@ -241,8 +237,6 @@ export async function analyzeBehaviors(log: (msg: string) => void = () => {}): P
   const provider = (process.env.INSPECTOR_PROVIDER ?? process.env.DEFAULT_PROVIDER ?? 'deepseek') as ProviderName
   const modelId = process.env.INSPECTOR_MODEL ?? process.env.DEFAULT_MODEL ?? 'deepseek-v4-flash'
   const model = getModel(provider, modelId)
-
-  const globalStats = computeGlobalStats(summaries)
 
   // Phase 2a: LLM clustering
   const operationLines = summaries
@@ -303,7 +297,7 @@ ${operationLines}
       const totalToolErrors = ops.reduce((sum, o) => sum + o.toolErrors, 0)
       const toolErrorRate = totalToolCalls > 0 ? totalToolErrors / totalToolCalls : 0
 
-      const health = evaluateHealth(successRate, avgDuration, avgSteps, avgTokens, toolErrorRate, globalStats)
+      const health = evaluateHealth(successRate, avgDuration, avgSteps, avgTokens, toolErrorRate, b.toolSequence)
 
       const timestamps = ops
         .map((o) => o.operationId)
