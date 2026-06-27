@@ -42,7 +42,7 @@ export const webFetchTool = tool({
       })
 
       if (!res.ok) {
-        return { error: `HTTP ${res.status} ${res.statusText}`, url }
+        return { error: `HTTP ${res.status} ${res.statusText}`, statusCode: res.status, url }
       }
 
       const contentType = res.headers.get('content-type') ?? ''

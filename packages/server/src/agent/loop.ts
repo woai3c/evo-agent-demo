@@ -98,6 +98,9 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           const outputSize = resultStr.length
           const errorMsg = typeof resultObj.error === 'string' ? resultObj.error : undefined
           const success = !errorMsg
+          // Extract HTTP status code for tool errors (e.g. webFetch 403)
+          const statusCode =
+            typeof resultObj.statusCode === 'number' ? resultObj.statusCode : undefined
           // Use the args carried by this result, not the shared pendingToolArgs —
           // otherwise parallel tool calls in one step trace each other's input.
           const toolInput = ((part as { args?: Record<string, unknown> }).args ?? {}) as Record<string, unknown>
@@ -110,7 +113,7 @@ export async function* agentLoop(params: AgentLoopParams): AsyncGenerator<Stream
           ) {
             throw new Error(`Search API rate limited: ${errorMsg}`)
           }
-          tracer.onToolResult(part.toolName, toolInput, success, outputSize, resultObj, errorMsg)
+          tracer.onToolResult(part.toolName, toolInput, success, outputSize, resultObj, errorMsg, statusCode)
           yield {
             type: 'tool-result',
             toolName: part.toolName as ToolName,
