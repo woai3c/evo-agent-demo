@@ -51,12 +51,13 @@ export class Tracer {
     outputSize: number,
     toolOutput: Record<string, unknown>,
     errorMessage?: string,
+    statusCode?: number,
   ): void {
     const durationMs = Date.now() - this.toolCallStart
     const sanitizedInput = sanitizeToolInput(input)
 
     const msg = errorMessage || `${toolName} failed`
-    const error = success ? undefined : { code: 'tool_error', message: msg, providerStatus: null }
+    const error = success ? undefined : { code: 'tool_error', message: msg, providerStatus: statusCode ?? null }
 
     const stepId = traceStore.insertStep({
       operationId: this.operationId,
@@ -78,6 +79,7 @@ export class Tracer {
         stepId,
         provider: this.provider,
         errorType: 'tool_error',
+        statusCode,
         message: msg,
         toolName,
       })
